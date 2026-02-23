@@ -16,6 +16,15 @@ const ApplyAllChanges_Button = document.getElementById("ApplyAllChanges_Button")
 const ResetSavedData_Button = document.getElementById("ResetSavedData_Button");
 
 // --------------------------------------------------
+// Bias UI elements (safe if not present yet)
+// --------------------------------------------------
+
+const BiasTowardRetailPercent_Slider = document.getElementById("BiasTowardRetailPercent_Slider");
+const BiasMarketPercent_Label = document.getElementById("BiasMarketPercent_Label");
+const BiasRetailPercent_Label = document.getElementById("BiasRetailPercent_Label");
+const BiasAdjustedSpotPrice_Label = document.getElementById("BiasAdjustedSpotPrice_Label");
+
+// --------------------------------------------------
 // Storage keys (localStorage = long-term memory)
 // --------------------------------------------------
 
@@ -31,11 +40,14 @@ const StorageKey_PurchaseHistory_Array = "purchase_history_v1_ledger_rows";
 // Spot cache (offline fallback)
 const StorageKey_SpotCache = "cached_spot_prices_v1";
 
+// Bias slider stored value (int percent toward Retail)
+const StorageKey_BiasTowardRetailPercent_Int = "bias_toward_retail_percent_v1";
+
 // --------------------------------------------------
 // Backend
 // --------------------------------------------------
 
-const BackendBaseUrl_String = "https://away-hayes-yellow-feature.trycloudflare.com";
+const BackendBaseUrl_String = "";
 //const BackendBaseUrl_String = "http://localhost:8787";
 
 // --------------------------------------------------
@@ -392,6 +404,79 @@ function UndoLastPurchase_ForHoldingId(holdingId_String) {
 }
 
 // --------------------------------------------------
+// Bias helpers (INT ONLY)
+// --------------------------------------------------
+
+function ClampInt_0To100(value_Int) {
+  const n = Number(value_Int);
+  if (!Number.isFinite(n)) return 0;
+
+  const floored = Math.floor(n);
+
+  if (floored < 0) return 0;
+  if (floored > 100) return 100;
+
+  return floored;
+}
+
+function LoadBiasTowardRetailPercent_Int() {
+  const raw = localStorage.getItem(StorageKey_BiasTowardRetailPercent_Int);
+  if (raw == null) return 0;
+
+  return ClampInt_0To100(raw);
+}
+
+function SaveBiasTowardRetailPercent_Int(value_Int) {
+  const clamped = ClampInt_0To100(value_Int);
+  localStorage.setItem(StorageKey_BiasTowardRetailPercent_Int, String(clamped));
+}
+
+function UpdateBiasUi_FromStoredValue() {
+  // Safe if HTML hasn’t been updated yet
+  if (!BiasTowardRetailPercent_Slider || !BiasMarketPercent_Label || !BiasRetailPercent_Label) {
+    return;
+  }
+
+  const retailPercent_Int = LoadBiasTowardRetailPercent_Int();
+  const marketPercent_Int = 100 - retailPercent_Int;
+
+  BiasTowardRetailPercent_Slider.value = String(retailPercent_Int);
+  BiasMarketPercent_Label.textContent = "Market Spot: " + String(marketPercent_Int) + "%";
+  BiasRetailPercent_Label.textContent = "Bullion Retail: " + String(retailPercent_Int) + "%";
+}
+
+function CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(
+  marketSpotPricePerOunce_NumberOrNull,
+  retailSpotPricePerOunce_NumberOrNull,
+  biasTowardRetailPercent_Int
+) {
+  // If one side is missing, fall back to the other.
+  const market = Number(marketSpotPricePerOunce_NumberOrNull);
+  const retail = Number(retailSpotPricePerOunce_NumberOrNull);
+
+  const marketOk = Number.isFinite(market) && market > 0;
+  const retailOk = Number.isFinite(retail) && retail > 0;
+
+  if (!marketOk && !retailOk) {
+    return null;
+  }
+
+  if (marketOk && !retailOk) {
+    return market;
+  }
+
+  if (!marketOk && retailOk) {
+    return retail;
+  }
+
+  // Both valid. Blend with int percent.
+  const wRetail_Int = ClampInt_0To100(biasTowardRetailPercent_Int);
+
+  // adjusted = market + (retail - market) * w / 100
+  return market + ((retail - market) * wRetail_Int / 100);
+}
+
+// --------------------------------------------------
 // Formatting helpers
 // --------------------------------------------------
 
@@ -488,9 +573,13 @@ function CreateNumericOnlyDecimalTextBox(initialValueNumber) {
 // --------------------------------------------------
 
 function CreateEmptySpotCacheObject() {
+  // Backward compatible: existing version stores XAU/XAG (retail/reference).
+  // New optional fields: XAU_Market, XAG_Market for future “headline/COMEX-ish” source.
   return {
     XAU: null,
     XAG: null,
+    XAU_Market: null,
+    XAG_Market: null,
     LastUpdatedUtcIso: null,
     SourcesUsedText: null
   };
@@ -506,6 +595,11 @@ function LoadSpotCacheObject() {
     return {
       XAU: (obj && obj.XAU != null) ? Number(obj.XAU) : null,
       XAG: (obj && obj.XAG != null) ? Number(obj.XAG) : null,
+
+      // New optional fields (if absent, remain null)
+      XAU_Market: (obj && obj.XAU_Market != null) ? Number(obj.XAU_Market) : null,
+      XAG_Market: (obj && obj.XAG_Market != null) ? Number(obj.XAG_Market) : null,
+
       LastUpdatedUtcIso: (obj && obj.LastUpdatedUtcIso) ? String(obj.LastUpdatedUtcIso) : null,
       SourcesUsedText: (obj && obj.SourcesUsedText) ? String(obj.SourcesUsedText) : null
     };
@@ -527,13 +621,36 @@ function GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject) {
   if (!spotCacheObject) return null;
 
   const metal = String(holdingObject.MetalCode_String || "").toUpperCase().trim();
+  const biasTowardRetailPercent_Int = LoadBiasTowardRetailPercent_Int();
 
   if (metal === "XAU") {
-    return (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU)) ? Number(spotCacheObject.XAU) : null;
+    // Retail is your existing XAU value.
+    const retail =
+      (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU))
+        ? Number(spotCacheObject.XAU)
+        : null;
+
+    // Market is optional future value.
+    const market =
+      (spotCacheObject.XAU_Market != null && Number.isFinite(spotCacheObject.XAU_Market))
+        ? Number(spotCacheObject.XAU_Market)
+        : null;
+
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(market, retail, biasTowardRetailPercent_Int);
   }
 
   if (metal === "XAG") {
-    return (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG)) ? Number(spotCacheObject.XAG) : null;
+    const retail =
+      (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG))
+        ? Number(spotCacheObject.XAG)
+        : null;
+
+    const market =
+      (spotCacheObject.XAG_Market != null && Number.isFinite(spotCacheObject.XAG_Market))
+        ? Number(spotCacheObject.XAG_Market)
+        : null;
+
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(market, retail, biasTowardRetailPercent_Int);
   }
 
   return null;
@@ -594,8 +711,11 @@ async function RefreshSpotCacheFromBackendAsync() {
   const existing = LoadSpotCacheObject();
   const next = CreateEmptySpotCacheObject();
 
+  // Preserve existing values (including optional market fields)
   next.XAU = existing.XAU;
   next.XAG = existing.XAG;
+  next.XAU_Market = existing.XAU_Market;
+  next.XAG_Market = existing.XAG_Market;
   next.LastUpdatedUtcIso = existing.LastUpdatedUtcIso;
   next.SourcesUsedText = existing.SourcesUsedText;
 
@@ -603,6 +723,7 @@ async function RefreshSpotCacheFromBackendAsync() {
   const usedCountTextParts = [];
 
   if (xauResult.status === "fulfilled") {
+    // Your existing endpoint currently returns what we treat as "retail/reference"
     next.XAU = xauResult.value.priceUsdPerTroyOunce;
     anySuccess = true;
 
@@ -730,6 +851,9 @@ function ResetAllSavedData() {
   localStorage.removeItem(StorageKey_OwnedState_ByHoldingId_Object);
   localStorage.removeItem(StorageKey_PurchaseHistory_Array);
   localStorage.removeItem(StorageKey_SpotCache);
+
+  // Clear bias setting too
+  localStorage.removeItem(StorageKey_BiasTowardRetailPercent_Int);
 }
 
 // --------------------------------------------------
@@ -773,7 +897,7 @@ function ApplyAllChanges_ForAllHoldings() {
 }
 
 // --------------------------------------------------
-// Totals rendering helpers (new)
+// Totals rendering helpers
 // --------------------------------------------------
 
 function CreateTotalsSectionElement(titleText, totalsRowObject, footnoteTextOrNull) {
@@ -840,20 +964,44 @@ function CreateTotalsSectionElement(titleText, totalsRowObject, footnoteTextOrNu
 function RenderHeaderFromSpotCache() {
   const spotCache = LoadSpotCacheObject();
 
+  // NOTE: these are the adjusted per-ounce values now (bias applied)
+  const goldSpotAdjusted =
+    (spotCache.XAU != null || spotCache.XAU_Market != null)
+      ? GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAU" }, spotCache)
+      : null;
+
+  const silverSpotAdjusted =
+    (spotCache.XAG != null || spotCache.XAG_Market != null)
+      ? GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAG" }, spotCache)
+      : null;
+
   const goldSpotDisplay =
-    (spotCache.XAU != null && Number.isFinite(spotCache.XAU))
-      ? FormatCurrency(spotCache.XAU)
+    (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted))
+      ? FormatCurrency(goldSpotAdjusted)
       : "(not loaded)";
 
   const silverSpotDisplay =
-    (spotCache.XAG != null && Number.isFinite(spotCache.XAG))
-      ? FormatCurrency(spotCache.XAG)
+    (silverSpotAdjusted != null && Number.isFinite(silverSpotAdjusted))
+      ? FormatCurrency(silverSpotAdjusted)
       : "(not loaded)";
 
   Status_Element.innerHTML =
     "<strong>Estimated Price Per Ounce (Oz.):</strong><br>" +
     "• Gold: " + goldSpotDisplay + "<br>" +
     "• Silver: " + silverSpotDisplay;
+
+  // Show adjusted in the bias box too (if present)
+  if (BiasAdjustedSpotPrice_Label) {
+    if (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted) && silverSpotAdjusted != null && Number.isFinite(silverSpotAdjusted)) {
+      BiasAdjustedSpotPrice_Label.textContent = "Gold " + FormatCurrency(goldSpotAdjusted) + " | Silver " + FormatCurrency(silverSpotAdjusted);
+    } else if (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted)) {
+      BiasAdjustedSpotPrice_Label.textContent = "Gold " + FormatCurrency(goldSpotAdjusted);
+    } else if (silverSpotAdjusted != null && Number.isFinite(silverSpotAdjusted)) {
+      BiasAdjustedSpotPrice_Label.textContent = "Silver " + FormatCurrency(silverSpotAdjusted);
+    } else {
+      BiasAdjustedSpotPrice_Label.textContent = "(not loaded)";
+    }
+  }
 
   const lastUpdatedReadable = FormatUtcIsoToLocalReadable(spotCache.LastUpdatedUtcIso);
   const sourcesText = spotCache.SourcesUsedText ? spotCache.SourcesUsedText : null;
@@ -863,6 +1011,9 @@ function RenderHeaderFromSpotCache() {
   } else {
     LastUpdated_Element.textContent = "Last updated: " + lastUpdatedReadable;
   }
+
+  // Ensure bias UI is synced on every render
+  UpdateBiasUi_FromStoredValue();
 }
 
 function RenderHoldingsTable() {
@@ -931,7 +1082,7 @@ function RenderHoldingsTable() {
     const valueOfOwned = unitsOwned_ReadOnly * lastKnownMarketPricePerUnit_ReadOnly;
     const gainLossOwned = valueOfOwned - totalPaidOwned_ReadOnly;
 
-    // Spot-based estimates
+    // Spot-based estimates (USES ADJUSTED SPOT PER OUNCE)
     const spotPricePerOunce = GetSpotPricePerOunce_ForHolding(holding, spotCache);
     const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holding);
 
@@ -1075,7 +1226,7 @@ function RenderHoldingsTable() {
       gainLossCell.classList.add(gainLossClass);
     }
 
-    // Spot estimate cells
+    // Spot estimate cells (adjusted)
     const spotEstimatedPricePerUnitCell = document.createElement("td");
     spotEstimatedPricePerUnitCell.textContent =
       (spotEstimatedPricePerUnit != null)
@@ -1164,7 +1315,7 @@ function RenderHoldingsTable() {
   HoldingsContainer_Element.appendChild(tableElement);
 
   // --------------------------------------------------
-  // Totals display: readable tables (new)
+  // Totals display: readable tables
   // --------------------------------------------------
 
   Totals_Element.innerHTML = "";
@@ -1302,9 +1453,42 @@ function HandleResetSavedDataClick() {
   Render();
 }
 
-RefreshSpotPrices_Button.addEventListener("click", HandleRefreshSpotPricesClick);
-ApplyAllChanges_Button.addEventListener("click", HandleApplyAllChangesClick);
-ResetSavedData_Button.addEventListener("click", HandleResetSavedDataClick);
+if (RefreshSpotPrices_Button) {
+  RefreshSpotPrices_Button.addEventListener("click", HandleRefreshSpotPricesClick);
+}
+
+if (ApplyAllChanges_Button) {
+  ApplyAllChanges_Button.addEventListener("click", HandleApplyAllChangesClick);
+}
+
+if (ResetSavedData_Button) {
+  ResetSavedData_Button.addEventListener("click", HandleResetSavedDataClick);
+}
+
+// --------------------------------------------------
+// Bias slider event wiring (INT ONLY)
+// --------------------------------------------------
+
+function HandleBiasTowardRetailPercent_Slider_Input() {
+  if (!BiasTowardRetailPercent_Slider) {
+    return;
+  }
+
+  const newValue_Int = ClampInt_0To100(BiasTowardRetailPercent_Slider.value);
+
+  SaveBiasTowardRetailPercent_Int(newValue_Int);
+
+  // Update labels immediately
+  UpdateBiasUi_FromStoredValue();
+
+  // Re-render to update spot-based estimates across table/totals/header
+  Render();
+}
+
+// Only attach if the slider exists in the DOM
+if (BiasTowardRetailPercent_Slider) {
+  BiasTowardRetailPercent_Slider.addEventListener("input", HandleBiasTowardRetailPercent_Slider_Input);
+}
 
 // --------------------------------------------------
 // Startup
@@ -1328,6 +1512,10 @@ async function Startup_RefreshSpotOnlyAsync() {
 
 async function StartupAsync() {
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
+
+  // Ensure bias UI shows stored value (or default)
+  UpdateBiasUi_FromStoredValue();
+
   Render();
   await Startup_RefreshSpotOnlyAsync();
 }
@@ -1336,5 +1524,4 @@ StartupAsync();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
-
 }

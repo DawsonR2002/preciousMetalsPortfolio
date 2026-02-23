@@ -1,7 +1,7 @@
 "use strict";
 
 // BUMP THIS any time you change index.html/app.js in a way you want to force-update.
-const CacheName_String = "precious-metals-portfolio-cache-v3";
+const CacheName_String = "precious-metals-portfolio-cache-v4";
 
 // Only cache what you actually serve as static files.
 // If you add css/images later, put them here too.

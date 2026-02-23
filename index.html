@@ -28,7 +28,6 @@
       margin-top: 10px;
     }
 
-    /* Header row (darker blue) */
     th {
       background-color: #0d2f6b;
       color: white;
@@ -42,7 +41,6 @@
       text-align: center;
     }
 
-    /* Item name column (medium blue) */
     table td:first-child {
       background-color: #1f4fa3;
       color: white;
@@ -51,19 +49,17 @@
       text-align: left;
     }
 
-    /* Alternate rows except first column */
     tr:nth-child(even) td:not(:first-child) {
       background-color: #f5f5f5;
     }
 
-    /* Gain / Loss colors */
     .gain-positive {
-      color: #00b894; /* traffic-light blue green */
+      color: #00b894;
       font-weight: bold;
     }
 
     .gain-negative {
-      color: #d63031; /* red */
+      color: #d63031;
       font-weight: bold;
     }
 
@@ -81,7 +77,6 @@
       margin: 25px 0;
     }
 
-    /* Totals styling */
     .totals-section {
       margin-top: 10px;
       margin-bottom: 18px;
@@ -117,6 +112,67 @@
       font-size: 12px;
       color: #444;
     }
+
+    /* === Added for Bias UI (keeps your style theme) === */
+
+    .bias-section {
+      margin-top: 10px;
+      margin-bottom: 18px;
+      max-width: 1100px;
+      border: 1px solid #ccc;
+      padding: 12px;
+    }
+
+    .bias-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .bias-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .bias-label-left {
+      font-weight: bold;
+      color: #0d2f6b;
+      min-width: 160px;
+    }
+
+    .bias-label-right {
+      font-weight: bold;
+      color: #0d2f6b;
+      min-width: 160px;
+      text-align: right;
+    }
+
+    .bias-slider {
+      width: 100%;
+      margin: 6px 0 10px 0;
+    }
+
+    .bias-helper {
+      font-size: 12px;
+      color: #444;
+      margin-top: 6px;
+    }
+
+    .bias-adjusted {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+
+    .bias-adjusted-value {
+      font-size: 18px;
+      color: #0d2f6b;
+    }
   </style>
 </head>
 
@@ -140,6 +196,46 @@
   </button>
 
   <hr>
+
+  <!-- === Added Bias UI Section (Option 3) === -->
+  <h2>Pricing Bias</h2>
+
+  <div class="bias-section">
+
+    <div class="bias-title">
+      Adjusted Spot Price Bias
+    </div>
+
+    <div class="bias-row">
+      <div id="BiasMarketPercent_Label" class="bias-label-left">
+        Market Spot: 100%
+      </div>
+
+      <div id="BiasRetailPercent_Label" class="bias-label-right">
+        Bullion Retail: 0%
+      </div>
+    </div>
+
+    <!-- Int-only: slider is 0..100, app.js will round to int and show whole percents -->
+    <input
+      id="BiasTowardRetailPercent_Slider"
+      class="bias-slider"
+      type="range"
+      min="0"
+      max="100"
+      step="1"
+      value="0"
+    />
+
+    <div class="bias-helper">
+      Drag left for Market Spot, right for Bullion Retail. (This only changes the Adjusted value.)
+    </div>
+
+    <div id="BiasAdjustedContainer_Element" class="bias-adjusted">
+      Adjusted: <span id="BiasAdjustedSpotPrice_Label" class="bias-adjusted-value">$0</span>
+    </div>
+
+  </div>
 
   <h2>Holdings</h2>
   <div id="HoldingsContainer_Element"></div>
