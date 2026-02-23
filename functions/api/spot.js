@@ -6,26 +6,23 @@ export async function onRequest(context) {
     return JsonResponse({ error: "Invalid metal code" }, 400);
   }
 
-  const providers = BuildProviderList(metal);
+  const providers = [
+    FetchFromGoldPriceOrg,
+    FetchFromMetalsLive
+  ];
 
   const results = await Promise.allSettled(
-    providers.map(p => FetchWithTimeout(p.url, 4000))
+    providers.map(fn => fn(metal))
   );
 
   const prices = [];
 
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-
-    if (result.status !== "fulfilled") continue;
-
-    try {
-      const parsedPrice = providers[i].parse(result.value);
-      if (Number.isFinite(parsedPrice) && parsedPrice > 0) {
-        prices.push(parsedPrice);
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      const price = result.value;
+      if (Number.isFinite(price) && price > 0) {
+        prices.push(price);
       }
-    } catch {
-      continue;
     }
   }
 
@@ -41,99 +38,92 @@ export async function onRequest(context) {
 
   const median = CalculateMedian(prices);
 
-  // Reject outliers outside ±2%
-  const filtered = prices.filter(price => {
-    const deviation = Math.abs(price - median) / median;
-    return deviation <= 0.02;
-  });
-
-  const finalPrices = filtered.length > 0 ? filtered : prices;
-  const finalMedian = CalculateMedian(finalPrices);
-
   return JsonResponse({
     metal,
-    priceUsdPerTroyOunce: finalMedian,
-    usedCount: finalPrices.length,
+    priceUsdPerTroyOunce: median,
+    usedCount: prices.length,
     fetchedOkCount: prices.length,
     updatedAtUtcIso: new Date().toISOString()
   });
 }
 
 /* -------------------------------------------------- */
-/* Provider List */
+/* Provider 1 — GoldPrice.org */
 /* -------------------------------------------------- */
 
-function BuildProviderList(metal) {
-  const metalLower = metal.toLowerCase();
+async function FetchFromGoldPriceOrg(metal) {
+  const response = await fetch(
+    "https://data-asg.goldprice.org/dbXRates/USD",
+    { cache: "no-store" }
+  );
 
-  return [
-    {
-      name: "gold-api",
-      url: `https://gold-api.com/price/${metal}`,
-      parse: json => Number(json.price)
-    },
-    {
-      name: "gold-api-lowercase",
-      url: `https://gold-api.com/price/${metalLower}`,
-      parse: json => Number(json.price)
-    },
-    {
-      name: "metalpriceapi-demo",
-      url: `https://api.metalpriceapi.com/v1/latest?api_key=demo&base=USD&currencies=${metal}`,
-      parse: json => {
-        const rate = json && json.rates ? json.rates[metal] : null;
-        return rate ? 1 / Number(rate) : NaN;
-      }
-    }
-  ];
-}
+  if (!response.ok) throw new Error("GoldPrice failed");
 
-/* -------------------------------------------------- */
-/* Fetch With Timeout */
-/* -------------------------------------------------- */
+  const json = await response.json();
 
-async function FetchWithTimeout(url, timeoutMs) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  const response = await fetch(url, {
-    method: "GET",
-    signal: controller.signal
-  });
-
-  clearTimeout(timeoutId);
-
-  if (!response.ok) {
-    throw new Error("HTTP " + response.status);
+  if (!json || !Array.isArray(json.items)) {
+    throw new Error("Invalid GoldPrice format");
   }
 
-  return await response.json();
+  const data = json.items[0];
+
+  if (metal === "XAU") return Number(data.xauPrice);
+  if (metal === "XAG") return Number(data.xagPrice);
+
+  throw new Error("Metal not supported");
 }
 
 /* -------------------------------------------------- */
-/* Median Calculation */
+/* Provider 2 — Metals.live */
+/* -------------------------------------------------- */
+
+async function FetchFromMetalsLive(metal) {
+  const response = await fetch(
+    "https://api.metals.live/v1/spot",
+    { cache: "no-store" }
+  );
+
+  if (!response.ok) throw new Error("MetalsLive failed");
+
+  const json = await response.json();
+
+  if (!Array.isArray(json)) throw new Error("Invalid MetalsLive format");
+
+  for (const row of json) {
+    if (!Array.isArray(row) || row.length !== 2) continue;
+
+    const symbol = String(row[0]).toLowerCase();
+    const price = Number(row[1]);
+
+    if (metal === "XAU" && symbol === "gold") return price;
+    if (metal === "XAG" && symbol === "silver") return price;
+  }
+
+  throw new Error("Metal not found");
+}
+
+/* -------------------------------------------------- */
+/* Median */
 /* -------------------------------------------------- */
 
 function CalculateMedian(numbersArray) {
   const sorted = [...numbersArray].sort((a, b) => a - b);
-  const middleIndex = Math.floor(sorted.length / 2);
+  const mid = Math.floor(sorted.length / 2);
 
   if (sorted.length % 2 === 0) {
-    return (sorted[middleIndex - 1] + sorted[middleIndex]) / 2;
+    return (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
-  return sorted[middleIndex];
+  return sorted[mid];
 }
 
 /* -------------------------------------------------- */
-/* JSON Response Helper */
+/* JSON Response */
 /* -------------------------------------------------- */
 
 function JsonResponse(object, statusCode = 200) {
   return new Response(JSON.stringify(object), {
     status: statusCode,
-    headers: {
-      "Content-Type": "application/json"
-    }
+    headers: { "Content-Type": "application/json" }
   });
 }
