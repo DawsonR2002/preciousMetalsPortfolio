@@ -40,7 +40,7 @@ const StorageKey_PurchaseHistory_Array = "purchase_history_v1_ledger_rows";
 // Spot cache (offline fallback)
 const StorageKey_SpotCache = "cached_spot_prices_v1";
 
-// Bias slider stored value (int percent toward Retail)
+// Bias storage key (int percent toward Retail)
 const StorageKey_BiasTowardRetailPercent_Int = "bias_toward_retail_percent_v1";
 
 // --------------------------------------------------
@@ -57,94 +57,68 @@ const BackendBaseUrl_String = "";
 const CurrentRenderedInputs_ByHoldingId_Object = {};
 
 // --------------------------------------------------
-// Holdings Catalog (hardcoded by you)
-// NOTE: This is the “seed” / default. The actual owned state is stored in localStorage.
-// ALSO NOTE: We add MetalCode_String + OuncesPerUnit_Number for spot-based estimates.
+// Holdings Catalog
 // --------------------------------------------------
 
 const HoldingsCatalog_Array = [
   {
     HoldingId: "gold_eagle_1oz_2010",
     DisplayName: "Gold American Eagle 1 oz (2010)",
-
-    // I) 1 oz Gold
     MetalCode_String: "XAU",
     OuncesPerUnit_Number: 1.0,
-
     Purchases: [
       { Units: 5, PricePerUnit: 2429.13, TotalPaid_LimitedToSpecificPurchases: 12145.65 }
     ],
-
     MarketPricePerUnit_Default_Number: 5011.30
   },
   {
     HoldingId: "silver_bar_highland_mint_buffalo_10oz",
     DisplayName: "Silver Bar Highland Mint Buffalo 10oz",
-
-    // II) 10 oz Silver
     MetalCode_String: "XAG",
     OuncesPerUnit_Number: 10.0,
-
     Purchases: [
       { Units: 31, PricePerUnit: 299.89, TotalPaid_LimitedToSpecificPurchases: 9296.59 }
     ],
-
     MarketPricePerUnit_Default_Number: 807.06
   },
   {
     HoldingId: "silver_bar_golden_state_mint_10oz",
     DisplayName: "Silver Bar Golden State Mint 10oz",
-
-    // III) 10 oz Silver
     MetalCode_String: "XAG",
     OuncesPerUnit_Number: 10.0,
-
     Purchases: [
       { Units: 84, PricePerUnit: 299.89, TotalPaid_LimitedToSpecificPurchases: 25190.76 }
     ],
-
     MarketPricePerUnit_Default_Number: 807.06
   },
   {
     HoldingId: "silver_round_asahi_1oz",
     DisplayName: "Silver Round Asahi 1 Oz",
-
-    // IV) 1 oz Silver
     MetalCode_String: "XAG",
     OuncesPerUnit_Number: 1.0,
-
     Purchases: [
       { Units: 229, PricePerUnit: 32.23, TotalPaid_LimitedToSpecificPurchases: 9636.32 }
     ],
-
     MarketPricePerUnit_Default_Number: 80.71
   },
   {
     HoldingId: "gold_st_helena_eagle_snake_1_4oz",
     DisplayName: "Gold St Helena Eagle & Snake 1/4oz",
-
-    // V) 0.25 oz Gold
     MetalCode_String: "XAU",
     OuncesPerUnit_Number: 0.25,
-
     Purchases: [
       { Units: 30, PricePerUnit: 977.74, TotalPaid_LimitedToSpecificPurchases: 29332.20 }
     ],
-
     MarketPricePerUnit_Default_Number: 1252.82
   },
   {
     HoldingId: "silver_bar_10oz_jbr",
     DisplayName: "Silver Bar 10oz JBR",
-
-    // VI) 10 oz Silver
     MetalCode_String: "XAG",
     OuncesPerUnit_Number: 10.0,
-
     Purchases: [
       { Units: 64, PricePerUnit: 426.96, TotalPaid_LimitedToSpecificPurchases: 27325.44 }
     ],
-
     MarketPricePerUnit_Default_Number: 807.06
   }
 ];
@@ -201,7 +175,7 @@ function CalculatePurchases_TotalPaid_Number(purchasesArray) {
 }
 
 // --------------------------------------------------
-// Draft edits (Mom typing, not yet committed)
+// Draft edits
 // --------------------------------------------------
 
 function CreateDefaultDraftEdits_Object() {
@@ -229,7 +203,7 @@ function SaveDraftEdits_ByHoldingId_Object(draftEditsByHoldingId_Object) {
 }
 
 // --------------------------------------------------
-// Owned state (committed portfolio)
+// Owned state
 // --------------------------------------------------
 
 function CreateOwnedState_DefaultForHolding_FromCatalog(holdingObject) {
@@ -281,7 +255,7 @@ function EnsureOwnedStateSeeded_FromCatalogIfMissing() {
 }
 
 // --------------------------------------------------
-// Purchase history ledger (Apply Purchase creates rows)
+// Purchase history ledger
 // --------------------------------------------------
 
 function LoadPurchaseHistory_Array() {
@@ -330,7 +304,6 @@ function FindHolding_DisplayName(holdingId_String) {
   return holdingId_String;
 }
 
-// Delete a purchase record AND subtract its impact out of owned totals.
 function DeletePurchaseRecord_AndReverseOwnedImpact(purchaseId_String) {
   const history = LoadPurchaseHistory_Array();
   const ownedState = LoadOwnedState_ByHoldingId_Object();
@@ -374,7 +347,6 @@ function DeletePurchaseRecord_AndReverseOwnedImpact(purchaseId_String) {
   SavePurchaseHistory_Array(nextHistory);
 }
 
-// Undo last purchase for a single holding: find most recent history row for that holding and delete it.
 function UndoLastPurchase_ForHoldingId(holdingId_String) {
   const history = LoadPurchaseHistory_Array();
 
@@ -432,7 +404,6 @@ function SaveBiasTowardRetailPercent_Int(value_Int) {
 }
 
 function UpdateBiasUi_FromStoredValue() {
-  // Safe if HTML hasn’t been updated yet
   if (!BiasTowardRetailPercent_Slider || !BiasMarketPercent_Label || !BiasRetailPercent_Label) {
     return;
   }
@@ -450,7 +421,6 @@ function CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(
   retailSpotPricePerOunce_NumberOrNull,
   biasTowardRetailPercent_Int
 ) {
-  // If one side is missing, fall back to the other.
   const market = Number(marketSpotPricePerOunce_NumberOrNull);
   const retail = Number(retailSpotPricePerOunce_NumberOrNull);
 
@@ -469,10 +439,8 @@ function CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(
     return retail;
   }
 
-  // Both valid. Blend with int percent.
   const wRetail_Int = ClampInt_0To100(biasTowardRetailPercent_Int);
 
-  // adjusted = market + (retail - market) * w / 100
   return market + ((retail - market) * wRetail_Int / 100);
 }
 
@@ -517,9 +485,7 @@ function GetGainLossCssClass_ForNumber(numberValue) {
 }
 
 // --------------------------------------------------
-// Numeric-only input helpers (NO spinner arrows)
-// and DOES NOT re-render on every keystroke.
-// We commit on blur or Enter.
+// Numeric-only input helpers
 // --------------------------------------------------
 
 function CreateNumericOnlyIntegerTextBox(initialValueNumber) {
@@ -569,12 +535,10 @@ function CreateNumericOnlyDecimalTextBox(initialValueNumber) {
 }
 
 // --------------------------------------------------
-// Spot price cache (localStorage)
+// Spot cache (localStorage)
 // --------------------------------------------------
 
 function CreateEmptySpotCacheObject() {
-  // Backward compatible: existing version stores XAU/XAG (retail/reference).
-  // New optional fields: XAU_Market, XAG_Market for future “headline/COMEX-ish” source.
   return {
     XAU: null,
     XAG: null,
@@ -596,7 +560,6 @@ function LoadSpotCacheObject() {
       XAU: (obj && obj.XAU != null) ? Number(obj.XAU) : null,
       XAG: (obj && obj.XAG != null) ? Number(obj.XAG) : null,
 
-      // New optional fields (if absent, remain null)
       XAU_Market: (obj && obj.XAU_Market != null) ? Number(obj.XAU_Market) : null,
       XAG_Market: (obj && obj.XAG_Market != null) ? Number(obj.XAG_Market) : null,
 
@@ -613,8 +576,37 @@ function SaveSpotCacheObject(spotCacheObject) {
 }
 
 // --------------------------------------------------
-// Spot estimate helpers
+// Spot estimate helpers (NOW ALWAYS WEIGHTED)
 // --------------------------------------------------
+
+// If only one provider works, we synthesize the other side so the slider still moves.
+// Example: If retail exists but market missing, market = retail * (1 - spread)
+// Example: If market exists but retail missing, retail = market * (1 + spread)
+const SyntheticSpreadFraction_Number = 0.02; // 2% (tune this whenever)
+
+function CreateSyntheticMarketOrRetailIfMissing_Object(marketOrNull, retailOrNull) {
+  const market = Number(marketOrNull);
+  const retail = Number(retailOrNull);
+
+  const marketOk = Number.isFinite(market) && market > 0;
+  const retailOk = Number.isFinite(retail) && retail > 0;
+
+  if (marketOk && retailOk) {
+    return { market: market, retail: retail, usedSynthetic: false };
+  }
+
+  if (retailOk && !marketOk) {
+    const syntheticMarket = retail * (1 - SyntheticSpreadFraction_Number);
+    return { market: syntheticMarket, retail: retail, usedSynthetic: true };
+  }
+
+  if (marketOk && !retailOk) {
+    const syntheticRetail = market * (1 + SyntheticSpreadFraction_Number);
+    return { market: market, retail: syntheticRetail, usedSynthetic: true };
+  }
+
+  return { market: null, retail: null, usedSynthetic: false };
+}
 
 function GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject) {
   if (!holdingObject) return null;
@@ -624,33 +616,19 @@ function GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject) {
   const biasTowardRetailPercent_Int = LoadBiasTowardRetailPercent_Int();
 
   if (metal === "XAU") {
-    // Retail is your existing XAU value.
-    const retail =
-      (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU))
-        ? Number(spotCacheObject.XAU)
-        : null;
+    const retail = (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU)) ? Number(spotCacheObject.XAU) : null;
+    const market = (spotCacheObject.XAU_Market != null && Number.isFinite(spotCacheObject.XAU_Market)) ? Number(spotCacheObject.XAU_Market) : null;
 
-    // Market is optional future value.
-    const market =
-      (spotCacheObject.XAU_Market != null && Number.isFinite(spotCacheObject.XAU_Market))
-        ? Number(spotCacheObject.XAU_Market)
-        : null;
-
-    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(market, retail, biasTowardRetailPercent_Int);
+    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
   }
 
   if (metal === "XAG") {
-    const retail =
-      (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG))
-        ? Number(spotCacheObject.XAG)
-        : null;
+    const retail = (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG)) ? Number(spotCacheObject.XAG) : null;
+    const market = (spotCacheObject.XAG_Market != null && Number.isFinite(spotCacheObject.XAG_Market)) ? Number(spotCacheObject.XAG_Market) : null;
 
-    const market =
-      (spotCacheObject.XAG_Market != null && Number.isFinite(spotCacheObject.XAG_Market))
-        ? Number(spotCacheObject.XAG_Market)
-        : null;
-
-    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(market, retail, biasTowardRetailPercent_Int);
+    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
   }
 
   return null;
@@ -677,6 +655,7 @@ async function FetchSpotForMetalAsync(metalCode) {
 
   const json = await response.json();
 
+  // We accept "priceUsdPerTroyOunce" as the working number for the existing app behavior.
   const price = Number(json.priceUsdPerTroyOunce);
   if (!Number.isFinite(price) || price <= 0) {
     throw new Error("Invalid spot price payload for " + metalCode);
@@ -690,9 +669,15 @@ async function FetchSpotForMetalAsync(metalCode) {
       ? String(json.updatedAtUtcIso)
       : null;
 
+  // NEW: also accept these if your backend returns them
+  const marketPrice = (json.marketPriceUsdPerTroyOunce != null) ? Number(json.marketPriceUsdPerTroyOunce) : null;
+  const retailPrice = (json.retailPriceUsdPerTroyOunce != null) ? Number(json.retailPriceUsdPerTroyOunce) : null;
+
   return {
     metal: metalCode,
     priceUsdPerTroyOunce: price,
+    marketPriceUsdPerTroyOunce: (Number.isFinite(marketPrice) && marketPrice > 0) ? marketPrice : null,
+    retailPriceUsdPerTroyOunce: (Number.isFinite(retailPrice) && retailPrice > 0) ? retailPrice : null,
     usedCount: Number.isFinite(usedCount) ? usedCount : null,
     fetchedOkCount: Number.isFinite(fetchedOkCount) ? fetchedOkCount : null,
     updatedAtUtcIso: updatedAtUtcIso
@@ -711,7 +696,6 @@ async function RefreshSpotCacheFromBackendAsync() {
   const existing = LoadSpotCacheObject();
   const next = CreateEmptySpotCacheObject();
 
-  // Preserve existing values (including optional market fields)
   next.XAU = existing.XAU;
   next.XAG = existing.XAG;
   next.XAU_Market = existing.XAU_Market;
@@ -723,8 +707,17 @@ async function RefreshSpotCacheFromBackendAsync() {
   const usedCountTextParts = [];
 
   if (xauResult.status === "fulfilled") {
-    // Your existing endpoint currently returns what we treat as "retail/reference"
+    // Keep existing behavior: XAU acts like "retail/reference" for the UI
     next.XAU = xauResult.value.priceUsdPerTroyOunce;
+
+    // If backend provided explicit market/retail, store them
+    if (xauResult.value.marketPriceUsdPerTroyOunce != null) {
+      next.XAU_Market = xauResult.value.marketPriceUsdPerTroyOunce;
+    }
+    if (xauResult.value.retailPriceUsdPerTroyOunce != null) {
+      next.XAU = xauResult.value.retailPriceUsdPerTroyOunce;
+    }
+
     anySuccess = true;
 
     if (xauResult.value.usedCount != null && xauResult.value.fetchedOkCount != null) {
@@ -737,6 +730,14 @@ async function RefreshSpotCacheFromBackendAsync() {
 
   if (xagResult.status === "fulfilled") {
     next.XAG = xagResult.value.priceUsdPerTroyOunce;
+
+    if (xagResult.value.marketPriceUsdPerTroyOunce != null) {
+      next.XAG_Market = xagResult.value.marketPriceUsdPerTroyOunce;
+    }
+    if (xagResult.value.retailPriceUsdPerTroyOunce != null) {
+      next.XAG = xagResult.value.retailPriceUsdPerTroyOunce;
+    }
+
     anySuccess = true;
 
     if (xagResult.value.usedCount != null && xagResult.value.fetchedOkCount != null) {
@@ -788,11 +789,11 @@ function ApplyPurchase_ForHoldingId(holdingId_String) {
   const unitPrice_Number = (Number.isFinite(unitPrice) && unitPrice > 0) ? unitPrice : 0;
 
   if (unitsPurchase_Number <= 0) {
-    return; // nothing to apply
+    return;
   }
 
   if (unitPrice_Number <= 0) {
-    return; // must have a valid price to apply the purchase cost
+    return;
   }
 
   const owned = ownedState[holdingId_String];
@@ -802,17 +803,13 @@ function ApplyPurchase_ForHoldingId(holdingId_String) {
 
   owned.UnitsOwned_Number = Number(owned.UnitsOwned_Number) + unitsPurchase_Number;
   owned.TotalPaidOwned_Number = Number(owned.TotalPaidOwned_Number) + purchaseTotalCost;
-
-  // Also update last known price, because you literally just bought at that price.
   owned.LastKnownMarketPricePerUnit_Number = unitPrice_Number;
 
   ownedState[holdingId_String] = owned;
   SaveOwnedState_ByHoldingId_Object(ownedState);
 
-  // Log this purchase into history (this enables delete/undo)
   AppendPurchaseRecord_ToHistory(holdingId_String, unitsPurchase_Number, unitPrice_Number);
 
-  // Clear the “purchase now” units
   draftForHolding.UnitsBeingPurchasedNow_Number = 0;
   drafts[holdingId_String] = draftForHolding;
   SaveDraftEdits_ByHoldingId_Object(drafts);
@@ -829,7 +826,6 @@ function UpdateMarketPrice_ForHoldingId_IfValid(holdingId_String) {
   const unitPrice_Number = (Number.isFinite(unitPrice) && unitPrice > 0) ? unitPrice : 0;
 
   if (unitPrice_Number <= 0) {
-    // Your rule: if not > 0, do not update it
     return;
   }
 
@@ -851,13 +847,11 @@ function ResetAllSavedData() {
   localStorage.removeItem(StorageKey_OwnedState_ByHoldingId_Object);
   localStorage.removeItem(StorageKey_PurchaseHistory_Array);
   localStorage.removeItem(StorageKey_SpotCache);
-
-  // Clear bias setting too
   localStorage.removeItem(StorageKey_BiasTowardRetailPercent_Int);
 }
 
 // --------------------------------------------------
-// Apply All Changes (general button)
+// Apply All Changes
 // --------------------------------------------------
 
 function CommitAllRenderedInputs_ToDraftStorage() {
@@ -964,16 +958,8 @@ function CreateTotalsSectionElement(titleText, totalsRowObject, footnoteTextOrNu
 function RenderHeaderFromSpotCache() {
   const spotCache = LoadSpotCacheObject();
 
-  // NOTE: these are the adjusted per-ounce values now (bias applied)
-  const goldSpotAdjusted =
-    (spotCache.XAU != null || spotCache.XAU_Market != null)
-      ? GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAU" }, spotCache)
-      : null;
-
-  const silverSpotAdjusted =
-    (spotCache.XAG != null || spotCache.XAG_Market != null)
-      ? GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAG" }, spotCache)
-      : null;
+  const goldSpotAdjusted = GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAU" }, spotCache);
+  const silverSpotAdjusted = GetSpotPricePerOunce_ForHolding({ MetalCode_String: "XAG" }, spotCache);
 
   const goldSpotDisplay =
     (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted))
@@ -990,13 +976,12 @@ function RenderHeaderFromSpotCache() {
     "• Gold: " + goldSpotDisplay + "<br>" +
     "• Silver: " + silverSpotDisplay;
 
-  // Show adjusted in the bias box too (if present)
   if (BiasAdjustedSpotPrice_Label) {
-    if (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted) && silverSpotAdjusted != null && Number.isFinite(silverSpotAdjusted)) {
+    if (goldSpotAdjusted != null && silverSpotAdjusted != null) {
       BiasAdjustedSpotPrice_Label.textContent = "Gold " + FormatCurrency(goldSpotAdjusted) + " | Silver " + FormatCurrency(silverSpotAdjusted);
-    } else if (goldSpotAdjusted != null && Number.isFinite(goldSpotAdjusted)) {
+    } else if (goldSpotAdjusted != null) {
       BiasAdjustedSpotPrice_Label.textContent = "Gold " + FormatCurrency(goldSpotAdjusted);
-    } else if (silverSpotAdjusted != null && Number.isFinite(silverSpotAdjusted)) {
+    } else if (silverSpotAdjusted != null) {
       BiasAdjustedSpotPrice_Label.textContent = "Silver " + FormatCurrency(silverSpotAdjusted);
     } else {
       BiasAdjustedSpotPrice_Label.textContent = "(not loaded)";
@@ -1012,7 +997,6 @@ function RenderHeaderFromSpotCache() {
     LastUpdated_Element.textContent = "Last updated: " + lastUpdatedReadable;
   }
 
-  // Ensure bias UI is synced on every render
   UpdateBiasUi_FromStoredValue();
 }
 
@@ -1021,18 +1005,15 @@ function RenderHoldingsTable() {
   const ownedState = LoadOwnedState_ByHoldingId_Object();
   const spotCache = LoadSpotCacheObject();
 
-  // Clear previous UI references
   for (const key of Object.keys(CurrentRenderedInputs_ByHoldingId_Object)) {
     delete CurrentRenderedInputs_ByHoldingId_Object[key];
   }
 
-  // Totals (user market)
   let totals_PurchaseNowCost_UserMarket = 0;
   let totals_TotalPaidOwned = 0;
   let totals_OwnedValue_UserMarket = 0;
   let totals_OwnedGainLoss_UserMarket = 0;
 
-  // Totals (spot-based)
   let totals_PurchaseNowCost_SpotEstimate = 0;
   let totals_OwnedValue_SpotEstimate = 0;
   let totals_OwnedGainLoss_SpotEstimate = 0;
@@ -1069,20 +1050,17 @@ function RenderHoldingsTable() {
     const totalPaidOwned_ReadOnly = Number(owned.TotalPaidOwned_Number) || 0;
     const lastKnownMarketPricePerUnit_ReadOnly = Number(owned.LastKnownMarketPricePerUnit_Number) || 0;
 
-    // Draft values (what Mom is typing)
     const draftExisting = drafts[holding.HoldingId];
     const draft = draftExisting != null ? draftExisting : CreateDefaultDraftEdits_Object();
 
     const draftUnitsPurchase = Number(draft.UnitsBeingPurchasedNow_Number) || 0;
     const draftMarketPrice = Number(draft.MarketPricePerUnit_Input_Number) || 0;
 
-    // Calculations (user market)
     const totalCostOfPurchase = draftUnitsPurchase * draftMarketPrice;
 
     const valueOfOwned = unitsOwned_ReadOnly * lastKnownMarketPricePerUnit_ReadOnly;
     const gainLossOwned = valueOfOwned - totalPaidOwned_ReadOnly;
 
-    // Spot-based estimates (USES ADJUSTED SPOT PER OUNCE)
     const spotPricePerOunce = GetSpotPricePerOunce_ForHolding(holding, spotCache);
     const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holding);
 
@@ -1106,13 +1084,11 @@ function RenderHoldingsTable() {
         ? (valueOfOwned_SpotEstimate - totalPaidOwned_ReadOnly)
         : null;
 
-    // Accumulate totals (user market)
     totals_PurchaseNowCost_UserMarket += totalCostOfPurchase;
     totals_TotalPaidOwned += totalPaidOwned_ReadOnly;
     totals_OwnedValue_UserMarket += valueOfOwned;
     totals_OwnedGainLoss_UserMarket += gainLossOwned;
 
-    // Accumulate totals (spot)
     if (valueOfOwned_SpotEstimate != null && gainLossOwned_SpotEstimate != null) {
       totals_OwnedValue_SpotEstimate += valueOfOwned_SpotEstimate;
       totals_OwnedGainLoss_SpotEstimate += gainLossOwned_SpotEstimate;
@@ -1127,17 +1103,14 @@ function RenderHoldingsTable() {
 
     const row = document.createElement("tr");
 
-    // Inputs
     const unitsPurchase_Input = CreateNumericOnlyIntegerTextBox(draftUnitsPurchase);
     const marketPrice_Input = CreateNumericOnlyDecimalTextBox(draftMarketPrice);
 
-    // Store references so Apply All can grab current values without blur/enter.
     CurrentRenderedInputs_ByHoldingId_Object[holding.HoldingId] = {
       UnitsPurchase_Input: unitsPurchase_Input,
       MarketPrice_Input: marketPrice_Input
     };
 
-    // Commit draft edits only on blur or Enter (NOT every keystroke)
     function CommitDraftEdits_FromInputs_ToLocalStorage() {
       const nextDrafts = LoadDraftEdits_ByHoldingId_Object();
 
@@ -1189,7 +1162,6 @@ function RenderHoldingsTable() {
     unitsPurchase_Input.addEventListener("keydown", HandleUnitsKeyDown);
     marketPrice_Input.addEventListener("keydown", HandlePriceKeyDown);
 
-    // Cells
     const itemCell = document.createElement("td");
     itemCell.textContent = holding.DisplayName;
 
@@ -1217,7 +1189,6 @@ function RenderHoldingsTable() {
     const valueOwnedCell = document.createElement("td");
     valueOwnedCell.textContent = FormatCurrency(valueOfOwned);
 
-    // Gain/Loss (Owned) with positive/negative coloring
     const gainLossCell = document.createElement("td");
     gainLossCell.textContent = FormatCurrency(gainLossOwned);
 
@@ -1226,7 +1197,6 @@ function RenderHoldingsTable() {
       gainLossCell.classList.add(gainLossClass);
     }
 
-    // Spot estimate cells (adjusted)
     const spotEstimatedPricePerUnitCell = document.createElement("td");
     spotEstimatedPricePerUnitCell.textContent =
       (spotEstimatedPricePerUnit != null)
@@ -1239,7 +1209,6 @@ function RenderHoldingsTable() {
         ? FormatCurrency(valueOfOwned_SpotEstimate)
         : "(spot not loaded)";
 
-    // Actions
     const actionsCell = document.createElement("td");
 
     const updatePriceButton = document.createElement("button");
@@ -1298,7 +1267,6 @@ function RenderHoldingsTable() {
 
     tableElement.appendChild(row);
 
-    // Seed draft defaults once (so boxes show something stable after refresh if you want)
     if (draftExisting == null) {
       const seededDraft = CreateDefaultDraftEdits_Object();
 
@@ -1313,10 +1281,6 @@ function RenderHoldingsTable() {
   }
 
   HoldingsContainer_Element.appendChild(tableElement);
-
-  // --------------------------------------------------
-  // Totals display: readable tables
-  // --------------------------------------------------
 
   Totals_Element.innerHTML = "";
 
@@ -1362,7 +1326,6 @@ function RenderPurchaseHistoryTable() {
     return;
   }
 
-  // Sort newest first for readability
   const sorted = [...history].sort(function (a, b) {
     const aa = String(a && a.PurchasedAtUtcIso_String ? a.PurchasedAtUtcIso_String : "");
     const bb = String(b && b.PurchasedAtUtcIso_String ? b.PurchasedAtUtcIso_String : "");
@@ -1453,20 +1416,12 @@ function HandleResetSavedDataClick() {
   Render();
 }
 
-if (RefreshSpotPrices_Button) {
-  RefreshSpotPrices_Button.addEventListener("click", HandleRefreshSpotPricesClick);
-}
-
-if (ApplyAllChanges_Button) {
-  ApplyAllChanges_Button.addEventListener("click", HandleApplyAllChangesClick);
-}
-
-if (ResetSavedData_Button) {
-  ResetSavedData_Button.addEventListener("click", HandleResetSavedDataClick);
-}
+RefreshSpotPrices_Button.addEventListener("click", HandleRefreshSpotPricesClick);
+ApplyAllChanges_Button.addEventListener("click", HandleApplyAllChangesClick);
+ResetSavedData_Button.addEventListener("click", HandleResetSavedDataClick);
 
 // --------------------------------------------------
-// Bias slider event wiring (INT ONLY)
+// Bias slider wiring
 // --------------------------------------------------
 
 function HandleBiasTowardRetailPercent_Slider_Input() {
@@ -1477,15 +1432,10 @@ function HandleBiasTowardRetailPercent_Slider_Input() {
   const newValue_Int = ClampInt_0To100(BiasTowardRetailPercent_Slider.value);
 
   SaveBiasTowardRetailPercent_Int(newValue_Int);
-
-  // Update labels immediately
   UpdateBiasUi_FromStoredValue();
-
-  // Re-render to update spot-based estimates across table/totals/header
   Render();
 }
 
-// Only attach if the slider exists in the DOM
 if (BiasTowardRetailPercent_Slider) {
   BiasTowardRetailPercent_Slider.addEventListener("input", HandleBiasTowardRetailPercent_Slider_Input);
 }
@@ -1503,7 +1453,6 @@ async function Startup_RefreshSpotOnlyAsync() {
       LastUpdated_Element.textContent = LastUpdated_Element.textContent + " | " + result.errors.join(" | ");
     }
   } catch (err) {
-    // Stay on cache/offline.
     Render();
     LastUpdated_Element.textContent =
       "Offline mode (using cached spot if available). " + String(err);
@@ -1512,10 +1461,7 @@ async function Startup_RefreshSpotOnlyAsync() {
 
 async function StartupAsync() {
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
-
-  // Ensure bias UI shows stored value (or default)
   UpdateBiasUi_FromStoredValue();
-
   Render();
   await Startup_RefreshSpotOnlyAsync();
 }
