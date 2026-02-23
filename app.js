@@ -35,7 +35,8 @@ const StorageKey_SpotCache = "cached_spot_prices_v1";
 // Backend
 // --------------------------------------------------
 
-const BackendBaseUrl_String = "http://localhost:8787";
+const BackendBaseUrl_String = "https://soon-relatively-catalogs-arkansas.trycloudflare.com";
+//const BackendBaseUrl_String = "http://localhost:8787";
 
 // --------------------------------------------------
 // Runtime UI references (so Apply All can commit even if inputs never blurred)
