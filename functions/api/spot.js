@@ -1,3 +1,5 @@
+// functions/api/spot.js
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const metal = String(url.searchParams.get("metal") || "").toUpperCase().trim();
@@ -6,11 +8,24 @@ export async function onRequest(context) {
     return JsonResponse({ error: "Invalid metal code. Use XAU or XAG." }, 400);
   }
 
+  // --------------------------------------------------
+  // Providers
+  // Keep the current ones, add old ones without removing.
+  // Each provider returns: { name, kind, price }
+  // where kind is "retail" or "market".
+  // --------------------------------------------------
+
   const providers = [
+    // Current
     FetchFromGoldPriceOrg_Retail,
-    FetchFromStooq_Market
+    FetchFromStooq_Market,
+
+    // Old (added back)
+    FetchFromGoldApiDotCom_Market,
+    FetchFromMetalsLive_Market
   ];
 
+  // Run them all in parallel
   const settledResults = await Promise.allSettled(
     providers.map(function ProviderInvoker(providerFunction) {
       return providerFunction(metal);
@@ -18,18 +33,28 @@ export async function onRequest(context) {
   );
 
   // We want to return:
-  // - retailPriceUsdPerTroyOunce
-  // - marketPriceUsdPerTroyOunce
-  // - priceUsdPerTroyOunce (a single “main” value for compatibility)
-  //   (For now: if both exist, use the median of both; if one exists, use it.)
+  // - retailPriceUsdPerTroyOunce (retail/reference)
+  // - marketPriceUsdPerTroyOunce (market headline-ish)
+  // - priceUsdPerTroyOunce (compat main)
+  //
+  // For the "main" value:
+  // - If we have BOTH buckets, we use median of [marketMedian, retailMedian]
+  // - If only one bucket exists, we use that bucket's median
+  //
+  // This preserves your ability to bias/weight in app.js using explicit fields,
+  // while still keeping backward compatibility.
 
-  let retailPriceUsdPerTroyOunce_NumberOrNull = null;
-  let marketPriceUsdPerTroyOunce_NumberOrNull = null;
-
+  const retailPrices_Array = [];
+  const marketPrices_Array = [];
   const providersReport_Array = [];
 
   for (let i = 0; i < settledResults.length; i += 1) {
     const result = settledResults[i];
+    const providerFunction = providers[i];
+
+    // Each providerFunction has ProviderInfo attached for better error reporting.
+    const providerName = providerFunction.ProviderInfo_Name || "(unknown)";
+    const providerKind = providerFunction.ProviderInfo_Kind || "(unknown)";
 
     if (result.status === "fulfilled") {
       const payload = result.value;
@@ -42,11 +67,11 @@ export async function onRequest(context) {
       });
 
       if (payload.kind === "retail") {
-        retailPriceUsdPerTroyOunce_NumberOrNull = payload.price;
+        retailPrices_Array.push(payload.price);
       }
 
       if (payload.kind === "market") {
-        marketPriceUsdPerTroyOunce_NumberOrNull = payload.price;
+        marketPrices_Array.push(payload.price);
       }
 
       continue;
@@ -54,24 +79,23 @@ export async function onRequest(context) {
 
     // rejected
     providersReport_Array.push({
-      name: "(unknown)",
-      kind: "(unknown)",
+      name: providerName,
+      kind: providerKind,
       ok: false,
       error: String(result.reason)
     });
   }
 
-  const collectedPrices_Array = [];
+  const retailMedian_NumberOrNull =
+    (retailPrices_Array.length > 0) ? CalculateMedian(retailPrices_Array) : null;
 
-  if (Number.isFinite(retailPriceUsdPerTroyOunce_NumberOrNull) && retailPriceUsdPerTroyOunce_NumberOrNull > 0) {
-    collectedPrices_Array.push(retailPriceUsdPerTroyOunce_NumberOrNull);
-  }
+  const marketMedian_NumberOrNull =
+    (marketPrices_Array.length > 0) ? CalculateMedian(marketPrices_Array) : null;
 
-  if (Number.isFinite(marketPriceUsdPerTroyOunce_NumberOrNull) && marketPriceUsdPerTroyOunce_NumberOrNull > 0) {
-    collectedPrices_Array.push(marketPriceUsdPerTroyOunce_NumberOrNull);
-  }
-
-  if (collectedPrices_Array.length === 0) {
+  if (
+    (!Number.isFinite(retailMedian_NumberOrNull) || retailMedian_NumberOrNull <= 0) &&
+    (!Number.isFinite(marketMedian_NumberOrNull) || marketMedian_NumberOrNull <= 0)
+  ) {
     return JsonResponse({
       metal: metal,
       priceUsdPerTroyOunce: null,
@@ -85,7 +109,25 @@ export async function onRequest(context) {
     });
   }
 
-  const mainPrice_Number = CalculateMedian(collectedPrices_Array);
+  // "Main" compatibility value:
+  // - If both exist: median of the two medians
+  // - Else: the one that exists
+  const mainCandidates_Array = [];
+
+  if (Number.isFinite(marketMedian_NumberOrNull) && marketMedian_NumberOrNull > 0) {
+    mainCandidates_Array.push(marketMedian_NumberOrNull);
+  }
+
+  if (Number.isFinite(retailMedian_NumberOrNull) && retailMedian_NumberOrNull > 0) {
+    mainCandidates_Array.push(retailMedian_NumberOrNull);
+  }
+
+  const mainPrice_Number =
+    (mainCandidates_Array.length > 0)
+      ? CalculateMedian(mainCandidates_Array)
+      : null;
+
+  const fetchedOkCount_Number = retailPrices_Array.length + marketPrices_Array.length;
 
   return JsonResponse({
     metal: metal,
@@ -93,13 +135,13 @@ export async function onRequest(context) {
     // Compatibility field your app already reads:
     priceUsdPerTroyOunce: mainPrice_Number,
 
-    usedCount: collectedPrices_Array.length,
-    fetchedOkCount: collectedPrices_Array.length,
+    usedCount: fetchedOkCount_Number,
+    fetchedOkCount: fetchedOkCount_Number,
     updatedAtUtcIso: new Date().toISOString(),
 
-    // New explicit fields for weighting:
-    marketPriceUsdPerTroyOunce: marketPriceUsdPerTroyOunce_NumberOrNull,
-    retailPriceUsdPerTroyOunce: retailPriceUsdPerTroyOunce_NumberOrNull,
+    // Explicit bucket medians:
+    marketPriceUsdPerTroyOunce: marketMedian_NumberOrNull,
+    retailPriceUsdPerTroyOunce: retailMedian_NumberOrNull,
 
     // Debug/visibility:
     providers: providersReport_Array
@@ -145,19 +187,14 @@ async function FetchFromGoldPriceOrg_Retail(metal) {
     price: price
   };
 }
+FetchFromGoldPriceOrg_Retail.ProviderInfo_Name = "GoldPrice";
+FetchFromGoldPriceOrg_Retail.ProviderInfo_Kind = "retail";
 
 /* -------------------------------------------------- */
 /* Provider 2 — Stooq (Market-ish “headline” source)   */
 /* -------------------------------------------------- */
 
 async function FetchFromStooq_Market(metal) {
-  // Stooq symbols:
-  // XAUUSD = Gold (ozt) / USD
-  // XAGUSD = Silver (ozt) / USD
-  //
-  // We use their CSV endpoint (daily). It returns a header + one row.
-  // Example: https://stooq.com/q/l/?s=xauusd&i=d
-
   let symbol = null;
 
   if (metal === "XAU") {
@@ -179,9 +216,6 @@ async function FetchFromStooq_Market(metal) {
 
   const text = await response.text();
 
-  // CSV format:
-  // Symbol,Date,Time,Open,High,Low,Close,Volume
-  // XAUUSD,2026-02-23,23:00:00,....,....,....,5227.60,0
   const lines = String(text).trim().split(/\r?\n/);
 
   if (lines.length < 2) {
@@ -209,6 +243,94 @@ async function FetchFromStooq_Market(metal) {
     price: closeValue_Number
   };
 }
+FetchFromStooq_Market.ProviderInfo_Name = "Stooq";
+FetchFromStooq_Market.ProviderInfo_Kind = "market";
+
+/* -------------------------------------------------- */
+/* Provider 3 — gold-api.com (Market-ish)              */
+/* -------------------------------------------------- */
+
+async function FetchFromGoldApiDotCom_Market(metal) {
+  const endpointUrl =
+    "https://api.gold-api.com/price/" + encodeURIComponent(metal);
+
+  const response = await fetch(endpointUrl, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error("gold-api.com failed HTTP " + String(response.status));
+  }
+
+  const json = await response.json();
+
+  const price = Number(json && json.price);
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error("gold-api.com returned invalid price");
+  }
+
+  return {
+    name: "gold-api.com",
+    kind: "market",
+    price: price
+  };
+}
+FetchFromGoldApiDotCom_Market.ProviderInfo_Name = "gold-api.com";
+FetchFromGoldApiDotCom_Market.ProviderInfo_Kind = "market";
+
+/* -------------------------------------------------- */
+/* Provider 4 — metals.live (Market-ish)               */
+/* -------------------------------------------------- */
+
+async function FetchFromMetalsLive_Market(metal) {
+  const response = await fetch("https://api.metals.live/v1/spot", { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error("MetalsLive failed HTTP " + String(response.status));
+  }
+
+  const json = await response.json();
+
+  if (!Array.isArray(json)) {
+    throw new Error("Invalid MetalsLive format");
+  }
+
+  for (const row of json) {
+    if (!Array.isArray(row) || row.length !== 2) continue;
+
+    const symbol = String(row[0]).toLowerCase();
+    const price = Number(row[1]);
+
+    if (metal === "XAU" && symbol === "gold") {
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("MetalsLive invalid gold price");
+      }
+      return {
+        name: "metals.live",
+        kind: "market",
+        price: price
+      };
+    }
+
+    if (metal === "XAG" && symbol === "silver") {
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("MetalsLive invalid silver price");
+      }
+      return {
+        name: "metals.live",
+        kind: "market",
+        price: price
+      };
+    }
+  }
+
+  throw new Error("MetalsLive metal not found");
+}
+FetchFromMetalsLive_Market.ProviderInfo_Name = "metals.live";
+FetchFromMetalsLive_Market.ProviderInfo_Kind = "market";
 
 /* -------------------------------------------------- */
 /* Median                                              */
