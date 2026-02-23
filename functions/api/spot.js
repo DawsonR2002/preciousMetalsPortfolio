@@ -1,199 +1,161 @@
 export async function onRequest(context) {
-  // ----------------------------
-  // CORS / Preflight
-  // ----------------------------
+  try {
+    const requestUrl = new URL(context.request.url);
+    const metal = String(requestUrl.searchParams.get("metal") || "").toUpperCase();
 
-  if (context.request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: CreateCorsHeaders()
-    });
-  }
-
-  // ----------------------------
-  // Parse + validate
-  // ----------------------------
-
-  const url = new URL(context.request.url);
-  const metal = String(url.searchParams.get("metal") || "").toUpperCase().trim();
-
-  if (metal !== "XAU" && metal !== "XAG") {
-    return JsonResponse({ error: "Invalid metal code" }, 400);
-  }
-
-  // ----------------------------
-  // Provider strategy
-  //
-  // IMPORTANT:
-  // - We treat Metals.live as "market-ish" (futures/spot style feed)
-  // - We treat GoldPrice as "retail/reference-ish"
-  //
-  // This is not perfect, but it gives you TWO lanes to blend with the bias slider.
-  // ----------------------------
-
-  const providerDefinitions_Array = [
-    { Name: "GoldPrice", Kind: "retail", Fn: FetchFromGoldPriceOrg },
-    { Name: "MetalsLive", Kind: "market", Fn: FetchFromMetalsLive }
-  ];
-
-  // ----------------------------
-  // Fetch (with timeouts)
-  // ----------------------------
-
-  const results = await Promise.allSettled(
-    providerDefinitions_Array.map(async function (p) {
-      const price = await FetchWithTimeout_NumberAsync(function () {
-        return p.Fn(metal);
-      }, 7000);
-
-      return {
-        ProviderName: p.Name,
-        ProviderKind: p.Kind,
-        PriceUsdPerTroyOunce: price
-      };
-    })
-  );
-
-  // ----------------------------
-  // Collect
-  // ----------------------------
-
-  const successfulPrices_All_Array = [];
-  let marketPrice_NumberOrNull = null;
-  let retailPrice_NumberOrNull = null;
-
-  const providerDebug_Array = [];
-
-  for (let i = 0; i < results.length; i += 1) {
-    const def = providerDefinitions_Array[i];
-    const r = results[i];
-
-    if (r.status === "fulfilled") {
-      const payload = r.value;
-      const price = Number(payload.PriceUsdPerTroyOunce);
-
-      providerDebug_Array.push({
-        name: payload.ProviderName,
-        kind: payload.ProviderKind,
-        ok: true,
-        price: Number.isFinite(price) ? price : null
-      });
-
-      if (Number.isFinite(price) && price > 0) {
-        successfulPrices_All_Array.push(price);
-
-        if (payload.ProviderKind === "market") {
-          marketPrice_NumberOrNull = price;
-        }
-
-        if (payload.ProviderKind === "retail") {
-          retailPrice_NumberOrNull = price;
-        }
-      }
-    } else {
-      providerDebug_Array.push({
-        name: def.Name,
-        kind: def.Kind,
-        ok: false,
-        error: String(r.reason)
-      });
+    if (metal !== "XAU" && metal !== "XAG") {
+      return JsonResponse({ error: "Invalid metal code. Use XAU or XAG." }, 400);
     }
-  }
 
-  // ----------------------------
-  // Decide the "main" price
-  // (Keep your existing contract: priceUsdPerTroyOunce)
-  // ----------------------------
+    // IMPORTANT:
+    // Use the global fetch directly, but we also run one tiny sanity fetch first.
+    // If THIS fails, something is deeply wrong, and we will report it clearly.
+    const sanity = await fetch("https://example.com", { cache: "no-store" });
+    if (!sanity || !sanity.ok) {
+      return JsonResponse(
+        {
+          metal: metal,
+          error: "Sanity fetch failed unexpectedly",
+          sanityStatus: sanity ? sanity.status : null
+        },
+        500
+      );
+    }
 
-  if (successfulPrices_All_Array.length === 0) {
-    return JsonResponse(
-      {
-        metal,
-        priceUsdPerTroyOunce: null,
-        usedCount: 0,
-        fetchedOkCount: 0,
-        updatedAtUtcIso: new Date().toISOString(),
+    const providers = [
+      { name: "GoldPrice", kind: "retail", fn: FetchFromGoldPriceOrg },
+      { name: "MetalsLive", kind: "market", fn: FetchFromMetalsLive }
+    ];
 
-        // new optional fields
-        marketPriceUsdPerTroyOunce: null,
-        retailPriceUsdPerTroyOunce: null,
-        providers: providerDebug_Array
-      },
-      200,
-      CreateCorsHeaders()
+    const results = await Promise.allSettled(
+      providers.map(async function (provider) {
+        const price = await provider.fn(metal);
+        return { provider: provider, price: price };
+      })
     );
-  }
 
-  const median = CalculateMedian(successfulPrices_All_Array);
+    let retailPriceUsdPerTroyOunce = null;
+    let marketPriceUsdPerTroyOunce = null;
 
-  return JsonResponse(
-    {
-      metal,
+    const pricesAllOk = [];
+    const providerReports = [];
 
-      // keep old name for app.js compatibility
-      priceUsdPerTroyOunce: median,
+    for (let i = 0; i < results.length; i++) {
+      const providerInfo = providers[i];
+      const result = results[i];
 
-      usedCount: successfulPrices_All_Array.length,
-      fetchedOkCount: successfulPrices_All_Array.length,
+      if (result.status === "fulfilled") {
+        const price = Number(result.value.price);
+
+        if (Number.isFinite(price) && price > 0) {
+          pricesAllOk.push(price);
+
+          if (providerInfo.kind === "retail") {
+            retailPriceUsdPerTroyOunce = price;
+          }
+          if (providerInfo.kind === "market") {
+            marketPriceUsdPerTroyOunce = price;
+          }
+
+          providerReports.push({
+            name: providerInfo.name,
+            kind: providerInfo.kind,
+            ok: true,
+            price: price
+          });
+        } else {
+          providerReports.push({
+            name: providerInfo.name,
+            kind: providerInfo.kind,
+            ok: false,
+            error: "Invalid numeric price"
+          });
+        }
+      } else {
+        providerReports.push({
+          name: providerInfo.name,
+          kind: providerInfo.kind,
+          ok: false,
+          error: String(result.reason)
+        });
+      }
+    }
+
+    let priceUsdPerTroyOunce = null;
+    if (pricesAllOk.length > 0) {
+      priceUsdPerTroyOunce = CalculateMedian(pricesAllOk);
+    }
+
+    return JsonResponse({
+      metal: metal,
+      priceUsdPerTroyOunce: priceUsdPerTroyOunce,
+      usedCount: pricesAllOk.length,
+      fetchedOkCount: pricesAllOk.length,
       updatedAtUtcIso: new Date().toISOString(),
 
-      // new optional fields (for your bias slider to blend later)
-      marketPriceUsdPerTroyOunce: marketPrice_NumberOrNull,
-      retailPriceUsdPerTroyOunce: retailPrice_NumberOrNull,
+      marketPriceUsdPerTroyOunce: marketPriceUsdPerTroyOunce,
+      retailPriceUsdPerTroyOunce: retailPriceUsdPerTroyOunce,
 
-      // debugging breadcrumbs (you can remove later)
-      providers: providerDebug_Array
-    },
-    200,
-    CreateCorsHeaders()
-  );
+      providers: providerReports
+    });
+  } catch (err) {
+    return JsonResponse(
+      {
+        error: "Unhandled exception in /api/spot",
+        message: String(err),
+        stack: (err && err.stack) ? String(err.stack) : null
+      },
+      500
+    );
+  }
 }
 
 /* -------------------------------------------------- */
-/* Provider 1 — GoldPrice.org (retail/reference-ish) */
+/* Provider 1 — GoldPrice.org                          */
 /* -------------------------------------------------- */
 
 async function FetchFromGoldPriceOrg(metal) {
-  const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", {
-    cache: "no-store",
-    headers: {
-      "Accept": "application/json"
-    }
-  });
+  const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", { cache: "no-store" });
 
-  if (!response.ok) throw new Error("GoldPrice failed: HTTP " + response.status);
+  if (!response.ok) {
+    throw new Error("GoldPrice failed HTTP " + response.status);
+  }
 
   const json = await response.json();
 
-  if (!json || !Array.isArray(json.items) || json.items.length < 1) {
+  if (!json || !Array.isArray(json.items) || json.items.length === 0) {
     throw new Error("Invalid GoldPrice format");
   }
 
   const data = json.items[0];
 
-  if (metal === "XAU") return Number(data.xauPrice);
-  if (metal === "XAG") return Number(data.xagPrice);
+  if (metal === "XAU") {
+    return Number(data.xauPrice);
+  }
+
+  if (metal === "XAG") {
+    return Number(data.xagPrice);
+  }
 
   throw new Error("Metal not supported");
 }
 
 /* -------------------------------------------------- */
-/* Provider 2 — Metals.live (market-ish) */
+/* Provider 2 — Metals.live                            */
 /* -------------------------------------------------- */
 
 async function FetchFromMetalsLive(metal) {
-  const response = await fetch("https://api.metals.live/v1/spot", {
-    cache: "no-store",
-    headers: {
-      "Accept": "application/json"
-    }
-  });
+  const response = await fetch("https://api.metals.live/v1/spot", { cache: "no-store" });
 
-  if (!response.ok) throw new Error("MetalsLive failed: HTTP " + response.status);
+  if (!response.ok) {
+    throw new Error("MetalsLive failed HTTP " + response.status);
+  }
 
   const json = await response.json();
 
-  if (!Array.isArray(json)) throw new Error("Invalid MetalsLive format");
+  if (!Array.isArray(json)) {
+    throw new Error("Invalid MetalsLive format");
+  }
 
   for (const row of json) {
     if (!Array.isArray(row) || row.length !== 2) continue;
@@ -201,15 +163,20 @@ async function FetchFromMetalsLive(metal) {
     const symbol = String(row[0]).toLowerCase();
     const price = Number(row[1]);
 
-    if (metal === "XAU" && symbol === "gold") return price;
-    if (metal === "XAG" && symbol === "silver") return price;
+    if (metal === "XAU" && symbol === "gold") {
+      return price;
+    }
+
+    if (metal === "XAG" && symbol === "silver") {
+      return price;
+    }
   }
 
   throw new Error("Metal not found");
 }
 
 /* -------------------------------------------------- */
-/* Median */
+/* Median                                              */
 /* -------------------------------------------------- */
 
 function CalculateMedian(numbersArray) {
@@ -227,65 +194,17 @@ function CalculateMedian(numbersArray) {
 }
 
 /* -------------------------------------------------- */
-/* Timeout helper */
+/* JSON Response                                       */
 /* -------------------------------------------------- */
 
-async function FetchWithTimeout_NumberAsync(fetchFunctionReturningPromise, timeoutMs_Int) {
-  const timeoutMs = Number(timeoutMs_Int);
-  const ms = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 7000;
-
-  const controller = new AbortController();
-  const timerId = setTimeout(function () {
-    controller.abort();
-  }, ms);
-
-  try {
-    // Give provider fetch access to the AbortSignal by binding globally:
-    // (Providers in this file use fetch directly; Cloudflare fetch supports AbortSignal.)
-    // We'll temporarily wrap global fetch with the signal via a closure approach:
-    const originalFetch = fetch;
-
-    function FetchWithSignal(input, init) {
-      const nextInit = init ? { ...init } : {};
-      nextInit.signal = controller.signal;
-      return originalFetch(input, nextInit);
-    }
-
-    // Monkey patch within this call scope only
-    const savedFetch = fetch;
-    // eslint-disable-next-line no-global-assign
-    fetch = FetchWithSignal;
-
-    const value = await fetchFunctionReturningPromise();
-
-    // restore
-    // eslint-disable-next-line no-global-assign
-    fetch = savedFetch;
-
-    return Number(value);
-  } finally {
-    clearTimeout(timerId);
-  }
-}
-
-/* -------------------------------------------------- */
-/* JSON Response + CORS */
-/* -------------------------------------------------- */
-
-function CreateCorsHeaders() {
-  return {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-}
-
-function JsonResponse(object, statusCode = 200, extraHeadersOrNull = null) {
-  const headers = extraHeadersOrNull ? extraHeadersOrNull : { "Content-Type": "application/json" };
+function JsonResponse(object, statusCode) {
+  const code = Number.isFinite(Number(statusCode)) ? Number(statusCode) : 200;
 
   return new Response(JSON.stringify(object), {
-    status: statusCode,
-    headers: headers
+    status: code,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    }
   });
 }
