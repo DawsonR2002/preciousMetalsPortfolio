@@ -35,7 +35,7 @@ const StorageKey_SpotCache = "cached_spot_prices_v1";
 // Backend
 // --------------------------------------------------
 
-const BackendBaseUrl_String = "https://softball-got-avon-clocks.trycloudflare.com";
+const BackendBaseUrl_String = "https://away-hayes-yellow-feature.trycloudflare.com";
 //const BackendBaseUrl_String = "http://localhost:8787";
 
 // --------------------------------------------------
@@ -1336,4 +1336,5 @@ StartupAsync();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
+
 }
