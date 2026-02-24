@@ -557,9 +557,30 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     const holdingId = holding.HoldingId;
 
     const owned = ownedState[holdingId] || {};
-    const unitsOwned_Number = Number(owned.UnitsOwned_Number);
-    const totalPaid_Number = Number(owned.TotalPaid_Number);
-    const lastPricePerUnit_Number = Number(owned.LastPricePerUnit_Number);
+        const unitsOwned_Number = Number(
+      owned.UnitsOwned_Number != null ? owned.UnitsOwned_Number :
+      owned.UnitsOwnedOwned_Number != null ? owned.UnitsOwnedOwned_Number :
+      owned.UnitsOwned != null ? owned.UnitsOwned :
+      owned.UnitsOwned_NumberOrNull != null ? owned.UnitsOwned_NumberOrNull :
+      owned.UnitsOwned_NumberValue != null ? owned.UnitsOwned_NumberValue :
+      owned.UnitsOwned_Number
+    );
+
+    const totalPaid_Number = Number(
+      owned.TotalPaidOwned_Number != null ? owned.TotalPaidOwned_Number :
+      owned.TotalPaid_Number != null ? owned.TotalPaid_Number :
+      owned.TotalPaidUsd_Number != null ? owned.TotalPaidUsd_Number :
+      owned.TotalPaidUsd != null ? owned.TotalPaidUsd :
+      owned.TotalPaid
+    );
+
+    const lastPricePerUnit_Number = Number(
+      owned.LastKnownMarketPricePerUnit_Number != null ? owned.LastKnownMarketPricePerUnit_Number :
+      owned.LastPricePerUnit_Number != null ? owned.LastPricePerUnit_Number :
+      owned.LastPricePerUnitUsd_Number != null ? owned.LastPricePerUnitUsd_Number :
+      owned.LastPricePerUnitUsd != null ? owned.LastPricePerUnitUsd :
+      owned.LastPrice
+    );
 
     const ouncesPerUnit_Number = Number(holding.OuncesPerUnit_Number);
     const metalCode_String = String(holding.MetalCode_String || "").toUpperCase().trim();
@@ -574,6 +595,46 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       metalCode_String === "XAG" ? spotCache.XAG_Retail :
       null;
 
+    // --------------------------------------------------
+    // Export fallbacks:
+    // - Owned state field names have evolved over time.
+    // - If TotalPaid / LastPrice are missing, compute them from purchase ledger and/or spot.
+    // --------------------------------------------------
+
+    let totalPaidUsd_Final_NumberOrNull = Number.isFinite(totalPaid_Number) ? totalPaid_Number : null;
+
+    if (!(Number.isFinite(totalPaidUsd_Final_NumberOrNull) && totalPaidUsd_Final_NumberOrNull >= 0)) {
+      let computedFromLedger = 0;
+      let foundAnyLedgerRows = false;
+
+      if (Array.isArray(purchaseHistory)) {
+        for (let phIndex = 0; phIndex < purchaseHistory.length; phIndex += 1) {
+          const record = purchaseHistory[phIndex];
+          const recordHoldingId = String(record && record.HoldingId_String != null ? record.HoldingId_String : "");
+          if (recordHoldingId === holdingId) {
+            const cost = Number(record && record.TotalCost_Number != null ? record.TotalCost_Number : NaN);
+            if (Number.isFinite(cost) && cost >= 0) {
+              computedFromLedger += cost;
+              foundAnyLedgerRows = true;
+            }
+          }
+        }
+      }
+
+      if (foundAnyLedgerRows) {
+        totalPaidUsd_Final_NumberOrNull = computedFromLedger;
+      }
+    }
+
+    let lastPricePerUnitUsd_Final_NumberOrNull = Number.isFinite(lastPricePerUnit_Number) ? lastPricePerUnit_Number : null;
+
+    if (!(Number.isFinite(lastPricePerUnitUsd_Final_NumberOrNull) && lastPricePerUnitUsd_Final_NumberOrNull > 0)) {
+      // Best-effort compute from spot-market if present:
+      if (Number.isFinite(spotMarketUsdPerOz_NumberOrNull) && spotMarketUsdPerOz_NumberOrNull > 0 && Number.isFinite(ouncesPerUnit_Number) && ouncesPerUnit_Number > 0) {
+        lastPricePerUnitUsd_Final_NumberOrNull = spotMarketUsdPerOz_NumberOrNull * ouncesPerUnit_Number;
+      }
+    }
+
     rows.push({
       RowType: "HoldingSnapshot",
       ExportedAtUtcIso: new Date().toISOString(),
@@ -584,8 +645,8 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       OuncesPerUnit: Number.isFinite(ouncesPerUnit_Number) ? ouncesPerUnit_Number : "",
 
       UnitsOwned: Number.isFinite(unitsOwned_Number) ? unitsOwned_Number : "",
-      TotalPaidUsd: Number.isFinite(totalPaid_Number) ? totalPaid_Number : "",
-      LastPricePerUnitUsd: Number.isFinite(lastPricePerUnit_Number) ? lastPricePerUnit_Number : "",
+      TotalPaidUsd: Number.isFinite(totalPaidUsd_Final_NumberOrNull) ? totalPaidUsd_Final_NumberOrNull : "",
+      LastPricePerUnitUsd: Number.isFinite(lastPricePerUnitUsd_Final_NumberOrNull) ? lastPricePerUnitUsd_Final_NumberOrNull : "",
 
       SpotMarketUsdPerTroyOunce: Number.isFinite(spotMarketUsdPerOz_NumberOrNull) ? spotMarketUsdPerOz_NumberOrNull : "",
       SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
