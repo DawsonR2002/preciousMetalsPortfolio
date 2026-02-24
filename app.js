@@ -466,16 +466,10 @@ function CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(
 }
 
 // --------------------------------------------------
-// Formatting helpers
-// --------------------------------------------------
-
-// --------------------------------------------------
 // CSV export (Download)
 // --------------------------------------------------
 
 function EscapeCsvField(rawValue) {
-  // Return a CSV-safe field value (with quotes if needed).
-  // RFC 4180-ish: quote if contains comma, quote, CR, or LF.
   const s = String(rawValue == null ? "" : rawValue);
 
   const mustQuote =
@@ -495,14 +489,12 @@ function EscapeCsvField(rawValue) {
 function ConvertRowsToCsvText(headerColumns_Array, rows_ArrayOfObjects) {
   const lines_Array = [];
 
-  // header
   lines_Array.push(
     headerColumns_Array.map(function HeaderColumnMap(col) {
       return EscapeCsvField(col);
     }).join(",")
   );
 
-  // rows
   for (let i = 0; i < rows_ArrayOfObjects.length; i += 1) {
     const rowObject = rows_ArrayOfObjects[i];
 
@@ -524,7 +516,6 @@ function DownloadTextFile_AsBrowserDownload(filename_String, mimeType_String, te
   link.href = objectUrl;
   link.download = filename_String;
 
-  // Some browsers require the element to be in the DOM.
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -533,7 +524,6 @@ function DownloadTextFile_AsBrowserDownload(filename_String, mimeType_String, te
 }
 
 function GetUtcTimestampForFilename_String() {
-  // Example: 2026-02-23T11-05-33Z
   const iso = new Date().toISOString();
   return iso.replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
 }
@@ -565,13 +555,11 @@ function CalculateTotalPaidFromLedger_ForHoldingId_NumberOrNull(purchaseHistory_
 }
 
 function GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(ownedObject, purchaseHistory_Array, holdingId_String) {
-  // Correct current name:
   const direct = Number(ownedObject && ownedObject.TotalPaidOwned_Number != null ? ownedObject.TotalPaidOwned_Number : NaN);
   if (Number.isFinite(direct) && direct >= 0) {
     return direct;
   }
 
-  // Fallback: compute from ledger (if ledger exists)
   const computed = CalculateTotalPaidFromLedger_ForHoldingId_NumberOrNull(purchaseHistory_Array, holdingId_String);
   if (Number.isFinite(computed) && computed >= 0) {
     return computed;
@@ -580,14 +568,44 @@ function GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(ownedObject, purchaseHisto
   return null;
 }
 
+function GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject) {
+  if (!holdingObject) return null;
+  if (!spotCacheObject) return null;
+
+  const metal = String(holdingObject.MetalCode_String || "").toUpperCase().trim();
+  const biasTowardRetailPercent_Int = LoadBiasTowardRetailPercent_Int();
+
+  if (metal === "XAU") {
+    const retail = (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU)) ? Number(spotCacheObject.XAU) : null;
+    const market = (spotCacheObject.XAU_Market != null && Number.isFinite(spotCacheObject.XAU_Market)) ? Number(spotCacheObject.XAU_Market) : null;
+
+    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
+  }
+
+  if (metal === "XAG") {
+    const retail = (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG)) ? Number(spotCacheObject.XAG) : null;
+    const market = (spotCacheObject.XAG_Market != null && Number.isFinite(spotCacheObject.XAG_Market)) ? Number(spotCacheObject.XAG_Market) : null;
+
+    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
+    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
+  }
+
+  return null;
+}
+
+function GetOuncesPerUnit_ForHolding(holdingObject) {
+  const oz = Number(holdingObject && holdingObject.OuncesPerUnit_Number != null ? holdingObject.OuncesPerUnit_Number : NaN);
+  if (!Number.isFinite(oz) || oz <= 0) return 0;
+  return oz;
+}
+
 function GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(ownedObject, holdingObject, spotCacheObject) {
-  // Correct current name:
   const direct = Number(ownedObject && ownedObject.LastKnownMarketPricePerUnit_Number != null ? ownedObject.LastKnownMarketPricePerUnit_Number : NaN);
   if (Number.isFinite(direct) && direct > 0) {
     return direct;
   }
 
-  // Fallback: approximate from spot (bias-adjusted) * ouncesPerUnit
   const spotPerOunce = GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject);
   const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holdingObject);
 
@@ -599,7 +617,6 @@ function GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(ownedObject, holdin
 }
 
 function BuildPortfolioExportRows_ArrayOfObjects() {
-  // Ensures we have something to export even on a first run.
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
 
   const ownedState = LoadOwnedState_ByHoldingId_Object() || {};
@@ -609,7 +626,11 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
 
   const rows = [];
 
-  // ---- Holdings snapshot rows
+  let totals_TotalSpentUsd = 0;
+  let totals_TotalValueUsd = 0;
+  let totals_TotalGainLossUsd = 0;
+
+  // ---- Holdings snapshot rows (with per-item net gain/loss)
   for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
     const holding = HoldingsCatalog_Array[i];
     const holdingId = holding.HoldingId;
@@ -617,18 +638,37 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     const owned = ownedState[holdingId] || {};
     const unitsOwned_Number = Number(owned.UnitsOwned_Number);
 
-    // FIX: correct owned field names + fallbacks
     const totalPaid_NumberOrNull = GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(owned, purchaseHistory, holdingId);
     const lastPricePerUnit_NumberOrNull = GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(owned, holding, spotCache);
+
+    const totalPaidOk = (totalPaid_NumberOrNull != null && Number.isFinite(totalPaid_NumberOrNull));
+    const lastPriceOk = (lastPricePerUnit_NumberOrNull != null && Number.isFinite(lastPricePerUnit_NumberOrNull));
+
+    const unitsOk = Number.isFinite(unitsOwned_Number);
+
+    const valueOfOwnedUsd_NumberOrNull =
+      (unitsOk && lastPriceOk)
+        ? (unitsOwned_Number * lastPricePerUnit_NumberOrNull)
+        : null;
+
+    const netGainLossUsd_NumberOrNull =
+      (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull) && totalPaidOk)
+        ? (valueOfOwnedUsd_NumberOrNull - totalPaid_NumberOrNull)
+        : null;
+
+    if (totalPaidOk) {
+      totals_TotalSpentUsd += totalPaid_NumberOrNull;
+    }
+    if (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull)) {
+      totals_TotalValueUsd += valueOfOwnedUsd_NumberOrNull;
+    }
+    if (netGainLossUsd_NumberOrNull != null && Number.isFinite(netGainLossUsd_NumberOrNull)) {
+      totals_TotalGainLossUsd += netGainLossUsd_NumberOrNull;
+    }
 
     const ouncesPerUnit_Number = Number(holding.OuncesPerUnit_Number);
     const metalCode_String = String(holding.MetalCode_String || "").toUpperCase().trim();
 
-    // IMPORTANT:
-    // Your spot cache uses:
-    //   - XAU / XAG as the "retail/reference" field
-    //   - XAU_Market / XAG_Market as the explicit market field
-    // There is no XAU_Retail property, so export must read XAU / XAG.
     const spotMarketUsdPerOz_NumberOrNull =
       metalCode_String === "XAU" ? spotCache.XAU_Market :
       metalCode_String === "XAG" ? spotCache.XAG_Market :
@@ -648,16 +688,18 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       MetalCode: metalCode_String,
       OuncesPerUnit: Number.isFinite(ouncesPerUnit_Number) ? ouncesPerUnit_Number : "",
 
-      UnitsOwned: Number.isFinite(unitsOwned_Number) ? unitsOwned_Number : "",
-      TotalPaidUsd: (totalPaid_NumberOrNull != null && Number.isFinite(totalPaid_NumberOrNull)) ? totalPaid_NumberOrNull : "",
-      LastPricePerUnitUsd: (lastPricePerUnit_NumberOrNull != null && Number.isFinite(lastPricePerUnit_NumberOrNull)) ? lastPricePerUnit_NumberOrNull : "",
+      UnitsOwned: unitsOk ? unitsOwned_Number : "",
+      TotalPaidUsd: totalPaidOk ? totalPaid_NumberOrNull : "",
+      LastPricePerUnitUsd: lastPriceOk ? lastPricePerUnit_NumberOrNull : "",
+
+      ValueOfOwnedUsd: (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull)) ? valueOfOwnedUsd_NumberOrNull : "",
+      NetGainLossUsd: (netGainLossUsd_NumberOrNull != null && Number.isFinite(netGainLossUsd_NumberOrNull)) ? netGainLossUsd_NumberOrNull : "",
 
       SpotMarketUsdPerTroyOunce: Number.isFinite(spotMarketUsdPerOz_NumberOrNull) ? spotMarketUsdPerOz_NumberOrNull : "",
       SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
 
       BiasTowardRetailPercent: biasPercent_Int,
 
-      // Purchase ledger columns left blank for this row type:
       PurchaseId: "",
       PurchasedAtUtcIso: "",
       UnitsPurchased: "",
@@ -683,6 +725,9 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       TotalPaidUsd: "",
       LastPricePerUnitUsd: "",
 
+      ValueOfOwnedUsd: "",
+      NetGainLossUsd: "",
+
       SpotMarketUsdPerTroyOunce: "",
       SpotRetailUsdPerTroyOunce: "",
       BiasTowardRetailPercent: "",
@@ -694,6 +739,34 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       TotalCostUsd: record.TotalCost_Number != null ? Number(record.TotalCost_Number) : ""
     });
   }
+
+  // ---- Bottom totals row
+  rows.push({
+    RowType: "PortfolioTotals",
+    ExportedAtUtcIso: new Date().toISOString(),
+
+    HoldingId: "",
+    DisplayName: "(TOTALS)",
+    MetalCode: "",
+    OuncesPerUnit: "",
+
+    UnitsOwned: "",
+    TotalPaidUsd: totals_TotalSpentUsd,
+    LastPricePerUnitUsd: "",
+
+    ValueOfOwnedUsd: totals_TotalValueUsd,
+    NetGainLossUsd: totals_TotalGainLossUsd,
+
+    SpotMarketUsdPerTroyOunce: "",
+    SpotRetailUsdPerTroyOunce: "",
+    BiasTowardRetailPercent: "",
+
+    PurchaseId: "",
+    PurchasedAtUtcIso: "",
+    UnitsPurchased: "",
+    PricePerUnitUsd: "",
+    TotalCostUsd: ""
+  });
 
   return rows;
 }
@@ -711,6 +784,9 @@ function BuildPortfolioExportCsvText() {
     "UnitsOwned",
     "TotalPaidUsd",
     "LastPricePerUnitUsd",
+
+    "ValueOfOwnedUsd",
+    "NetGainLossUsd",
 
     "SpotMarketUsdPerTroyOunce",
     "SpotRetailUsdPerTroyOunce",
@@ -738,6 +814,10 @@ function HandleDownloadCsvClick() {
     Status_Element.textContent = "Status: CSV export failed: " + String(err);
   }
 }
+
+// --------------------------------------------------
+// Formatting helpers
+// --------------------------------------------------
 
 function FormatCurrency(numberValue) {
   const n = Number(numberValue);
@@ -870,9 +950,6 @@ function SaveSpotCacheObject(spotCacheObject) {
 // Spot estimate helpers (NOW ALWAYS WEIGHTED)
 // --------------------------------------------------
 
-// If only one provider works, we synthesize the other side so the slider still moves.
-// Example: If retail exists but market missing, market = retail * (1 - spread)
-// Example: If market exists but retail missing, retail = market * (1 + spread)
 const SyntheticSpreadFraction_Number = 0.02; // 2% (tune this whenever)
 
 function CreateSyntheticMarketOrRetailIfMissing_Object(marketOrNull, retailOrNull) {
@@ -899,38 +976,6 @@ function CreateSyntheticMarketOrRetailIfMissing_Object(marketOrNull, retailOrNul
   return { market: null, retail: null, usedSynthetic: false };
 }
 
-function GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject) {
-  if (!holdingObject) return null;
-  if (!spotCacheObject) return null;
-
-  const metal = String(holdingObject.MetalCode_String || "").toUpperCase().trim();
-  const biasTowardRetailPercent_Int = LoadBiasTowardRetailPercent_Int();
-
-  if (metal === "XAU") {
-    const retail = (spotCacheObject.XAU != null && Number.isFinite(spotCacheObject.XAU)) ? Number(spotCacheObject.XAU) : null;
-    const market = (spotCacheObject.XAU_Market != null && Number.isFinite(spotCacheObject.XAU_Market)) ? Number(spotCacheObject.XAU_Market) : null;
-
-    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
-    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
-  }
-
-  if (metal === "XAG") {
-    const retail = (spotCacheObject.XAG != null && Number.isFinite(spotCacheObject.XAG)) ? Number(spotCacheObject.XAG) : null;
-    const market = (spotCacheObject.XAG_Market != null && Number.isFinite(spotCacheObject.XAG_Market)) ? Number(spotCacheObject.XAG_Market) : null;
-
-    const pair = CreateSyntheticMarketOrRetailIfMissing_Object(market, retail);
-    return CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(pair.market, pair.retail, biasTowardRetailPercent_Int);
-  }
-
-  return null;
-}
-
-function GetOuncesPerUnit_ForHolding(holdingObject) {
-  const oz = Number(holdingObject && holdingObject.OuncesPerUnit_Number != null ? holdingObject.OuncesPerUnit_Number : NaN);
-  if (!Number.isFinite(oz) || oz <= 0) return 0;
-  return oz;
-}
-
 // --------------------------------------------------
 // Backend calls
 // --------------------------------------------------
@@ -946,7 +991,6 @@ async function FetchSpotForMetalAsync(metalCode) {
 
   const json = await response.json();
 
-  // We accept "priceUsdPerTroyOunce" as the working number for the existing app behavior.
   const price = Number(json.priceUsdPerTroyOunce);
   if (!Number.isFinite(price) || price <= 0) {
     throw new Error("Invalid spot price payload for " + metalCode);
@@ -960,7 +1004,6 @@ async function FetchSpotForMetalAsync(metalCode) {
       ? String(json.updatedAtUtcIso)
       : null;
 
-  // NEW: also accept these if your backend returns them
   const marketPrice = (json.marketPriceUsdPerTroyOunce != null) ? Number(json.marketPriceUsdPerTroyOunce) : null;
   const retailPrice = (json.retailPriceUsdPerTroyOunce != null) ? Number(json.retailPriceUsdPerTroyOunce) : null;
 
@@ -998,10 +1041,8 @@ async function RefreshSpotCacheFromBackendAsync() {
   const usedCountTextParts = [];
 
   if (xauResult.status === "fulfilled") {
-    // Keep existing behavior: XAU acts like "retail/reference" for the UI
     next.XAU = xauResult.value.priceUsdPerTroyOunce;
 
-    // If backend provided explicit market/retail, store them
     if (xauResult.value.marketPriceUsdPerTroyOunce != null) {
       next.XAU_Market = xauResult.value.marketPriceUsdPerTroyOunce;
     }
@@ -1745,8 +1786,8 @@ async function Startup_RefreshSpotOnlyAsync() {
     Render();
 
     // CHANGED:
-    // Do NOT spam the UI with "Gold refresh failed..." text.
-    // If you want it, it's still available in result.errors for debugging.
+    // Do NOT append errors to the UI.
+    // Log to console only.
     if (result && result.errors && result.errors.length > 0) {
       console.warn("Spot refresh errors:", result.errors);
     }
