@@ -626,38 +626,38 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
 
   const rows = [];
 
-  let totals_TotalSpentUsd = 0;
+  let totals_TotalPaidUsd = 0;
   let totals_TotalValueUsd = 0;
   let totals_TotalGainLossUsd = 0;
 
-  // ---- Holdings snapshot rows (with per-item net gain/loss)
+  // ---- Holdings snapshot rows
   for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
     const holding = HoldingsCatalog_Array[i];
     const holdingId = holding.HoldingId;
 
     const owned = ownedState[holdingId] || {};
+
+    // ✅ Correct property names:
     const unitsOwned_Number = Number(owned.UnitsOwned_Number);
+    const totalPaidOwnedUsd_Number = Number(owned.TotalPaidOwned_Number);
+    const lastKnownMarketPricePerUnitUsd_Number = Number(owned.LastKnownMarketPricePerUnit_Number);
 
-    const totalPaid_NumberOrNull = GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(owned, purchaseHistory, holdingId);
-    const lastPricePerUnit_NumberOrNull = GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(owned, holding, spotCache);
-
-    const totalPaidOk = (totalPaid_NumberOrNull != null && Number.isFinite(totalPaid_NumberOrNull));
-    const lastPriceOk = (lastPricePerUnit_NumberOrNull != null && Number.isFinite(lastPricePerUnit_NumberOrNull));
-
-    const unitsOk = Number.isFinite(unitsOwned_Number);
+    const unitsOwnedOk = Number.isFinite(unitsOwned_Number);
+    const totalPaidOk = Number.isFinite(totalPaidOwnedUsd_Number);
+    const lastPriceOk = Number.isFinite(lastKnownMarketPricePerUnitUsd_Number);
 
     const valueOfOwnedUsd_NumberOrNull =
-      (unitsOk && lastPriceOk)
-        ? (unitsOwned_Number * lastPricePerUnit_NumberOrNull)
+      (unitsOwnedOk && lastPriceOk)
+        ? (unitsOwned_Number * lastKnownMarketPricePerUnitUsd_Number)
         : null;
 
     const netGainLossUsd_NumberOrNull =
       (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull) && totalPaidOk)
-        ? (valueOfOwnedUsd_NumberOrNull - totalPaid_NumberOrNull)
+        ? (valueOfOwnedUsd_NumberOrNull - totalPaidOwnedUsd_Number)
         : null;
 
     if (totalPaidOk) {
-      totals_TotalSpentUsd += totalPaid_NumberOrNull;
+      totals_TotalPaidUsd += totalPaidOwnedUsd_Number;
     }
     if (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull)) {
       totals_TotalValueUsd += valueOfOwnedUsd_NumberOrNull;
@@ -688,18 +688,19 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       MetalCode: metalCode_String,
       OuncesPerUnit: Number.isFinite(ouncesPerUnit_Number) ? ouncesPerUnit_Number : "",
 
-      UnitsOwned: unitsOk ? unitsOwned_Number : "",
-      TotalPaidUsd: totalPaidOk ? totalPaid_NumberOrNull : "",
-      LastPricePerUnitUsd: lastPriceOk ? lastPricePerUnit_NumberOrNull : "",
+      UnitsOwned: unitsOwnedOk ? unitsOwned_Number : "",
+      TotalPaidUsd: totalPaidOk ? totalPaidOwnedUsd_Number : "",
+      LastPricePerUnitUsd: lastPriceOk ? lastKnownMarketPricePerUnitUsd_Number : "",
 
+      // ✅ NEW per-item outputs:
       ValueOfOwnedUsd: (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull)) ? valueOfOwnedUsd_NumberOrNull : "",
       NetGainLossUsd: (netGainLossUsd_NumberOrNull != null && Number.isFinite(netGainLossUsd_NumberOrNull)) ? netGainLossUsd_NumberOrNull : "",
 
       SpotMarketUsdPerTroyOunce: Number.isFinite(spotMarketUsdPerOz_NumberOrNull) ? spotMarketUsdPerOz_NumberOrNull : "",
       SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
-
       BiasTowardRetailPercent: biasPercent_Int,
 
+      // Purchase ledger columns blank for snapshot rows:
       PurchaseId: "",
       PurchasedAtUtcIso: "",
       UnitsPurchased: "",
@@ -751,7 +752,7 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     OuncesPerUnit: "",
 
     UnitsOwned: "",
-    TotalPaidUsd: totals_TotalSpentUsd,
+    TotalPaidUsd: totals_TotalPaidUsd,
     LastPricePerUnitUsd: "",
 
     ValueOfOwnedUsd: totals_TotalValueUsd,
@@ -785,6 +786,7 @@ function BuildPortfolioExportCsvText() {
     "TotalPaidUsd",
     "LastPricePerUnitUsd",
 
+    // ✅ NEW columns:
     "ValueOfOwnedUsd",
     "NetGainLossUsd",
 
@@ -809,7 +811,7 @@ function HandleDownloadCsvClick() {
     const filename = "PreciousMetalsPortfolio_" + GetUtcTimestampForFilename_String() + ".csv";
     DownloadTextFile_AsBrowserDownload(filename, "text/csv;charset=utf-8", csvText);
 
-    Status_Element.textContent = "Status: CSV exported (" + String(filename) + ")";
+    Status_Element.textContent = "Status: CSV exported (includes per-item gain/loss + totals) (" + String(filename) + ")";
   } catch (err) {
     Status_Element.textContent = "Status: CSV export failed: " + String(err);
   }
