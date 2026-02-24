@@ -305,7 +305,6 @@ function FindHolding_DisplayName(holdingId_String) {
   return holdingId_String;
 }
 
-
 function FindHolding_MetalCode_String(holdingId_String) {
   for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
     const holding = HoldingsCatalog_Array[i];
@@ -325,7 +324,6 @@ function FindHolding_OuncesPerUnit_Number(holdingId_String) {
   }
   return null;
 }
-
 
 function DeletePurchaseRecord_AndReverseOwnedImpact(purchaseId_String) {
   const history = LoadPurchaseHistory_Array();
@@ -540,6 +538,66 @@ function GetUtcTimestampForFilename_String() {
   return iso.replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
 }
 
+function CalculateTotalPaidFromLedger_ForHoldingId_NumberOrNull(purchaseHistory_Array, holdingId_String) {
+  if (!Array.isArray(purchaseHistory_Array)) {
+    return null;
+  }
+
+  let sum = 0;
+  let sawAny = false;
+
+  for (let i = 0; i < purchaseHistory_Array.length; i += 1) {
+    const record = purchaseHistory_Array[i];
+    if (!record) continue;
+
+    if (String(record.HoldingId_String || "") !== String(holdingId_String || "")) {
+      continue;
+    }
+
+    const totalCost = Number(record.TotalCost_Number);
+    if (Number.isFinite(totalCost) && totalCost >= 0) {
+      sum += totalCost;
+      sawAny = true;
+    }
+  }
+
+  return sawAny ? sum : null;
+}
+
+function GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(ownedObject, purchaseHistory_Array, holdingId_String) {
+  // Correct current name:
+  const direct = Number(ownedObject && ownedObject.TotalPaidOwned_Number != null ? ownedObject.TotalPaidOwned_Number : NaN);
+  if (Number.isFinite(direct) && direct >= 0) {
+    return direct;
+  }
+
+  // Fallback: compute from ledger (if ledger exists)
+  const computed = CalculateTotalPaidFromLedger_ForHoldingId_NumberOrNull(purchaseHistory_Array, holdingId_String);
+  if (Number.isFinite(computed) && computed >= 0) {
+    return computed;
+  }
+
+  return null;
+}
+
+function GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(ownedObject, holdingObject, spotCacheObject) {
+  // Correct current name:
+  const direct = Number(ownedObject && ownedObject.LastKnownMarketPricePerUnit_Number != null ? ownedObject.LastKnownMarketPricePerUnit_Number : NaN);
+  if (Number.isFinite(direct) && direct > 0) {
+    return direct;
+  }
+
+  // Fallback: approximate from spot (bias-adjusted) * ouncesPerUnit
+  const spotPerOunce = GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject);
+  const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holdingObject);
+
+  if (spotPerOunce != null && Number.isFinite(spotPerOunce) && spotPerOunce > 0 && ouncesPerUnit > 0) {
+    return spotPerOunce * ouncesPerUnit;
+  }
+
+  return null;
+}
+
 function BuildPortfolioExportRows_ArrayOfObjects() {
   // Ensures we have something to export even on a first run.
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
@@ -557,83 +615,29 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     const holdingId = holding.HoldingId;
 
     const owned = ownedState[holdingId] || {};
-        const unitsOwned_Number = Number(
-      owned.UnitsOwned_Number != null ? owned.UnitsOwned_Number :
-      owned.UnitsOwnedOwned_Number != null ? owned.UnitsOwnedOwned_Number :
-      owned.UnitsOwned != null ? owned.UnitsOwned :
-      owned.UnitsOwned_NumberOrNull != null ? owned.UnitsOwned_NumberOrNull :
-      owned.UnitsOwned_NumberValue != null ? owned.UnitsOwned_NumberValue :
-      owned.UnitsOwned_Number
-    );
+    const unitsOwned_Number = Number(owned.UnitsOwned_Number);
 
-    const totalPaid_Number = Number(
-      owned.TotalPaidOwned_Number != null ? owned.TotalPaidOwned_Number :
-      owned.TotalPaid_Number != null ? owned.TotalPaid_Number :
-      owned.TotalPaidUsd_Number != null ? owned.TotalPaidUsd_Number :
-      owned.TotalPaidUsd != null ? owned.TotalPaidUsd :
-      owned.TotalPaid
-    );
-
-    const lastPricePerUnit_Number = Number(
-      owned.LastKnownMarketPricePerUnit_Number != null ? owned.LastKnownMarketPricePerUnit_Number :
-      owned.LastPricePerUnit_Number != null ? owned.LastPricePerUnit_Number :
-      owned.LastPricePerUnitUsd_Number != null ? owned.LastPricePerUnitUsd_Number :
-      owned.LastPricePerUnitUsd != null ? owned.LastPricePerUnitUsd :
-      owned.LastPrice
-    );
+    // FIX: correct owned field names + fallbacks
+    const totalPaid_NumberOrNull = GetOwnedTotalPaidUsd_ForHolding_NumberOrNull(owned, purchaseHistory, holdingId);
+    const lastPricePerUnit_NumberOrNull = GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(owned, holding, spotCache);
 
     const ouncesPerUnit_Number = Number(holding.OuncesPerUnit_Number);
     const metalCode_String = String(holding.MetalCode_String || "").toUpperCase().trim();
 
+    // IMPORTANT:
+    // Your spot cache uses:
+    //   - XAU / XAG as the "retail/reference" field
+    //   - XAU_Market / XAG_Market as the explicit market field
+    // There is no XAU_Retail property, so export must read XAU / XAG.
     const spotMarketUsdPerOz_NumberOrNull =
       metalCode_String === "XAU" ? spotCache.XAU_Market :
       metalCode_String === "XAG" ? spotCache.XAG_Market :
       null;
 
     const spotRetailUsdPerOz_NumberOrNull =
-      metalCode_String === "XAU" ? spotCache.XAU_Retail :
-      metalCode_String === "XAG" ? spotCache.XAG_Retail :
+      metalCode_String === "XAU" ? spotCache.XAU :
+      metalCode_String === "XAG" ? spotCache.XAG :
       null;
-
-    // --------------------------------------------------
-    // Export fallbacks:
-    // - Owned state field names have evolved over time.
-    // - If TotalPaid / LastPrice are missing, compute them from purchase ledger and/or spot.
-    // --------------------------------------------------
-
-    let totalPaidUsd_Final_NumberOrNull = Number.isFinite(totalPaid_Number) ? totalPaid_Number : null;
-
-    if (!(Number.isFinite(totalPaidUsd_Final_NumberOrNull) && totalPaidUsd_Final_NumberOrNull >= 0)) {
-      let computedFromLedger = 0;
-      let foundAnyLedgerRows = false;
-
-      if (Array.isArray(purchaseHistory)) {
-        for (let phIndex = 0; phIndex < purchaseHistory.length; phIndex += 1) {
-          const record = purchaseHistory[phIndex];
-          const recordHoldingId = String(record && record.HoldingId_String != null ? record.HoldingId_String : "");
-          if (recordHoldingId === holdingId) {
-            const cost = Number(record && record.TotalCost_Number != null ? record.TotalCost_Number : NaN);
-            if (Number.isFinite(cost) && cost >= 0) {
-              computedFromLedger += cost;
-              foundAnyLedgerRows = true;
-            }
-          }
-        }
-      }
-
-      if (foundAnyLedgerRows) {
-        totalPaidUsd_Final_NumberOrNull = computedFromLedger;
-      }
-    }
-
-    let lastPricePerUnitUsd_Final_NumberOrNull = Number.isFinite(lastPricePerUnit_Number) ? lastPricePerUnit_Number : null;
-
-    if (!(Number.isFinite(lastPricePerUnitUsd_Final_NumberOrNull) && lastPricePerUnitUsd_Final_NumberOrNull > 0)) {
-      // Best-effort compute from spot-market if present:
-      if (Number.isFinite(spotMarketUsdPerOz_NumberOrNull) && spotMarketUsdPerOz_NumberOrNull > 0 && Number.isFinite(ouncesPerUnit_Number) && ouncesPerUnit_Number > 0) {
-        lastPricePerUnitUsd_Final_NumberOrNull = spotMarketUsdPerOz_NumberOrNull * ouncesPerUnit_Number;
-      }
-    }
 
     rows.push({
       RowType: "HoldingSnapshot",
@@ -645,8 +649,8 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       OuncesPerUnit: Number.isFinite(ouncesPerUnit_Number) ? ouncesPerUnit_Number : "",
 
       UnitsOwned: Number.isFinite(unitsOwned_Number) ? unitsOwned_Number : "",
-      TotalPaidUsd: Number.isFinite(totalPaidUsd_Final_NumberOrNull) ? totalPaidUsd_Final_NumberOrNull : "",
-      LastPricePerUnitUsd: Number.isFinite(lastPricePerUnitUsd_Final_NumberOrNull) ? lastPricePerUnitUsd_Final_NumberOrNull : "",
+      TotalPaidUsd: (totalPaid_NumberOrNull != null && Number.isFinite(totalPaid_NumberOrNull)) ? totalPaid_NumberOrNull : "",
+      LastPricePerUnitUsd: (lastPricePerUnit_NumberOrNull != null && Number.isFinite(lastPricePerUnit_NumberOrNull)) ? lastPricePerUnit_NumberOrNull : "",
 
       SpotMarketUsdPerTroyOunce: Number.isFinite(spotMarketUsdPerOz_NumberOrNull) ? spotMarketUsdPerOz_NumberOrNull : "",
       SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
@@ -1740,8 +1744,11 @@ async function Startup_RefreshSpotOnlyAsync() {
     const result = await RefreshSpotCacheFromBackendAsync();
     Render();
 
-    if (result.errors && result.errors.length > 0) {
-      LastUpdated_Element.textContent = LastUpdated_Element.textContent + " | " + result.errors.join(" | ");
+    // CHANGED:
+    // Do NOT spam the UI with "Gold refresh failed..." text.
+    // If you want it, it's still available in result.errors for debugging.
+    if (result && result.errors && result.errors.length > 0) {
+      console.warn("Spot refresh errors:", result.errors);
     }
   } catch (err) {
     Render();
