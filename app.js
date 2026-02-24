@@ -630,14 +630,13 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
   let totals_TotalValueUsd = 0;
   let totals_TotalGainLossUsd = 0;
 
-  // ---- Holdings snapshot rows
+  // ---- Holdings snapshot rows (with per-item Value + Gain/Loss)
   for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
     const holding = HoldingsCatalog_Array[i];
     const holdingId = holding.HoldingId;
 
     const owned = ownedState[holdingId] || {};
 
-    // ✅ Correct property names:
     const unitsOwned_Number = Number(owned.UnitsOwned_Number);
     const totalPaidOwnedUsd_Number = Number(owned.TotalPaidOwned_Number);
     const lastKnownMarketPricePerUnitUsd_Number = Number(owned.LastKnownMarketPricePerUnit_Number);
@@ -692,7 +691,6 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       TotalPaidUsd: totalPaidOk ? totalPaidOwnedUsd_Number : "",
       LastPricePerUnitUsd: lastPriceOk ? lastKnownMarketPricePerUnitUsd_Number : "",
 
-      // ✅ NEW per-item outputs:
       ValueOfOwnedUsd: (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull)) ? valueOfOwnedUsd_NumberOrNull : "",
       NetGainLossUsd: (netGainLossUsd_NumberOrNull != null && Number.isFinite(netGainLossUsd_NumberOrNull)) ? netGainLossUsd_NumberOrNull : "",
 
@@ -700,7 +698,6 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
       SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
       BiasTowardRetailPercent: biasPercent_Int,
 
-      // Purchase ledger columns blank for snapshot rows:
       PurchaseId: "",
       PurchasedAtUtcIso: "",
       UnitsPurchased: "",
@@ -741,12 +738,40 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     });
   }
 
-  // ---- Bottom totals row
+  // ---- Spacer row (blank) to make Totals stand out
+  rows.push({
+    RowType: "",
+    ExportedAtUtcIso: "",
+
+    HoldingId: "",
+    DisplayName: "",
+    MetalCode: "",
+    OuncesPerUnit: "",
+
+    UnitsOwned: "",
+    TotalPaidUsd: "",
+    LastPricePerUnitUsd: "",
+
+    ValueOfOwnedUsd: "",
+    NetGainLossUsd: "",
+
+    SpotMarketUsdPerTroyOunce: "",
+    SpotRetailUsdPerTroyOunce: "",
+    BiasTowardRetailPercent: "",
+
+    PurchaseId: "",
+    PurchasedAtUtcIso: "",
+    UnitsPurchased: "",
+    PricePerUnitUsd: "",
+    TotalCostUsd: ""
+  });
+
+  // ---- Totals row (with far-left label)
   rows.push({
     RowType: "PortfolioTotals",
     ExportedAtUtcIso: new Date().toISOString(),
 
-    HoldingId: "",
+    HoldingId: "Totals:",
     DisplayName: "(TOTALS)",
     MetalCode: "",
     OuncesPerUnit: "",
@@ -779,30 +804,65 @@ function BuildPortfolioExportCsvText() {
 
     "HoldingId",
     "DisplayName",
-    "MetalCode",
-    "OuncesPerUnit",
+    "Metal",
+    "OzPerUnit",
 
     "UnitsOwned",
     "TotalPaidUsd",
-    "LastPricePerUnitUsd",
+    "LastPxUsdUnit",
 
-    // ✅ NEW columns:
-    "ValueOfOwnedUsd",
+    "ValueOwnedUsd",
     "NetGainLossUsd",
 
-    "SpotMarketUsdPerTroyOunce",
-    "SpotRetailUsdPerTroyOunce",
-    "BiasTowardRetailPercent",
+    "SpotMktUsdOz",
+    "SpotRtlUsdOz",
+    "BiasRtlPct",
 
     "PurchaseId",
     "PurchasedAtUtcIso",
     "UnitsPurchased",
-    "PricePerUnitUsd",
+    "PriceUsdUnit",
     "TotalCostUsd"
   ];
 
-  const rows = BuildPortfolioExportRows_ArrayOfObjects();
-  return ConvertRowsToCsvText(headerColumns_Array, rows);
+  const rowsRaw = BuildPortfolioExportRows_ArrayOfObjects();
+
+  // Map from our internal row object keys to the shorter header names
+  // (So you can have short headers without changing the row objects.)
+  const rowsMapped = [];
+
+  for (let i = 0; i < rowsRaw.length; i += 1) {
+    const r = rowsRaw[i] || {};
+
+    rowsMapped.push({
+      RowType: r.RowType,
+      ExportedAtUtcIso: r.ExportedAtUtcIso,
+
+      HoldingId: r.HoldingId,
+      DisplayName: r.DisplayName,
+      Metal: r.MetalCode,
+      OzPerUnit: r.OuncesPerUnit,
+
+      UnitsOwned: r.UnitsOwned,
+      TotalPaidUsd: r.TotalPaidUsd,
+      LastPxUsdUnit: r.LastPricePerUnitUsd,
+
+      ValueOwnedUsd: r.ValueOfOwnedUsd,
+      NetGainLossUsd: r.NetGainLossUsd,
+
+      SpotMktUsdOz: r.SpotMarketUsdPerTroyOunce,
+      SpotRtlUsdOz: r.SpotRetailUsdPerTroyOunce,
+      BiasRtlPct: r.BiasTowardRetailPercent,
+
+      PurchaseId: r.PurchaseId,
+      PurchasedAtUtcIso: r.PurchasedAtUtcIso,
+      UnitsPurchased: r.UnitsPurchased,
+      PriceUsdUnit: r.PricePerUnitUsd,
+      TotalCostUsd: r.TotalCostUsd
+    });
+  }
+
+  return ConvertRowsToCsvText(headerColumns_Array, rowsMapped);
 }
 
 function HandleDownloadCsvClick() {
