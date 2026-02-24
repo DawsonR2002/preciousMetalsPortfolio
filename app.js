@@ -14,6 +14,7 @@ const PurchaseHistoryContainer_Element = document.getElementById("PurchaseHistor
 const RefreshSpotPrices_Button = document.getElementById("RefreshSpotPrices_Button");
 const ApplyAllChanges_Button = document.getElementById("ApplyAllChanges_Button");
 const ResetSavedData_Button = document.getElementById("ResetSavedData_Button");
+const DownloadCsv_Button = document.getElementById("DownloadCsv_Button");
 
 // --------------------------------------------------
 // Bias UI elements (safe if not present yet)
@@ -304,6 +305,28 @@ function FindHolding_DisplayName(holdingId_String) {
   return holdingId_String;
 }
 
+
+function FindHolding_MetalCode_String(holdingId_String) {
+  for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
+    const holding = HoldingsCatalog_Array[i];
+    if (holding.HoldingId === holdingId_String) {
+      return holding.MetalCode_String;
+    }
+  }
+  return "";
+}
+
+function FindHolding_OuncesPerUnit_Number(holdingId_String) {
+  for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
+    const holding = HoldingsCatalog_Array[i];
+    if (holding.HoldingId === holdingId_String) {
+      return Number(holding.OuncesPerUnit_Number);
+    }
+  }
+  return null;
+}
+
+
 function DeletePurchaseRecord_AndReverseOwnedImpact(purchaseId_String) {
   const history = LoadPurchaseHistory_Array();
   const ownedState = LoadOwnedState_ByHoldingId_Object();
@@ -447,6 +470,209 @@ function CalculateAdjustedSpotPrice_Number_FromMarketAndRetail(
 // --------------------------------------------------
 // Formatting helpers
 // --------------------------------------------------
+
+// --------------------------------------------------
+// CSV export (Download)
+// --------------------------------------------------
+
+function EscapeCsvField(rawValue) {
+  // Return a CSV-safe field value (with quotes if needed).
+  // RFC 4180-ish: quote if contains comma, quote, CR, or LF.
+  const s = String(rawValue == null ? "" : rawValue);
+
+  const mustQuote =
+    s.indexOf(",") >= 0 ||
+    s.indexOf('"') >= 0 ||
+    s.indexOf("\r") >= 0 ||
+    s.indexOf("\n") >= 0;
+
+  if (!mustQuote) {
+    return s;
+  }
+
+  const escapedQuotes = s.replace(/"/g, '""');
+  return '"' + escapedQuotes + '"';
+}
+
+function ConvertRowsToCsvText(headerColumns_Array, rows_ArrayOfObjects) {
+  const lines_Array = [];
+
+  // header
+  lines_Array.push(
+    headerColumns_Array.map(function HeaderColumnMap(col) {
+      return EscapeCsvField(col);
+    }).join(",")
+  );
+
+  // rows
+  for (let i = 0; i < rows_ArrayOfObjects.length; i += 1) {
+    const rowObject = rows_ArrayOfObjects[i];
+
+    const rowLine = headerColumns_Array.map(function RowColumnMap(col) {
+      return EscapeCsvField(rowObject[col]);
+    }).join(",");
+
+    lines_Array.push(rowLine);
+  }
+
+  return lines_Array.join("\r\n") + "\r\n";
+}
+
+function DownloadTextFile_AsBrowserDownload(filename_String, mimeType_String, textContent_String) {
+  const blob = new Blob([textContent_String], { type: mimeType_String });
+  const objectUrl = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename_String;
+
+  // Some browsers require the element to be in the DOM.
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(objectUrl);
+}
+
+function GetUtcTimestampForFilename_String() {
+  // Example: 2026-02-23T11-05-33Z
+  const iso = new Date().toISOString();
+  return iso.replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+function BuildPortfolioExportRows_ArrayOfObjects() {
+  // Ensures we have something to export even on a first run.
+  EnsureOwnedStateSeeded_FromCatalogIfMissing();
+
+  const ownedState = LoadOwnedState_ByHoldingId_Object() || {};
+  const purchaseHistory = LoadPurchaseHistory_Array();
+  const spotCache = LoadSpotCacheObject();
+  const biasPercent_Int = LoadBiasTowardRetailPercent_Int();
+
+  const rows = [];
+
+  // ---- Holdings snapshot rows
+  for (let i = 0; i < HoldingsCatalog_Array.length; i += 1) {
+    const holding = HoldingsCatalog_Array[i];
+    const holdingId = holding.HoldingId;
+
+    const owned = ownedState[holdingId] || {};
+    const unitsOwned_Number = Number(owned.UnitsOwned_Number);
+    const totalPaid_Number = Number(owned.TotalPaid_Number);
+    const lastPricePerUnit_Number = Number(owned.LastPricePerUnit_Number);
+
+    const ouncesPerUnit_Number = Number(holding.OuncesPerUnit_Number);
+    const metalCode_String = String(holding.MetalCode_String || "").toUpperCase().trim();
+
+    const spotMarketUsdPerOz_NumberOrNull =
+      metalCode_String === "XAU" ? spotCache.XAU_Market :
+      metalCode_String === "XAG" ? spotCache.XAG_Market :
+      null;
+
+    const spotRetailUsdPerOz_NumberOrNull =
+      metalCode_String === "XAU" ? spotCache.XAU_Retail :
+      metalCode_String === "XAG" ? spotCache.XAG_Retail :
+      null;
+
+    rows.push({
+      RowType: "HoldingSnapshot",
+      ExportedAtUtcIso: new Date().toISOString(),
+
+      HoldingId: holdingId,
+      DisplayName: holding.DisplayName,
+      MetalCode: metalCode_String,
+      OuncesPerUnit: Number.isFinite(ouncesPerUnit_Number) ? ouncesPerUnit_Number : "",
+
+      UnitsOwned: Number.isFinite(unitsOwned_Number) ? unitsOwned_Number : "",
+      TotalPaidUsd: Number.isFinite(totalPaid_Number) ? totalPaid_Number : "",
+      LastPricePerUnitUsd: Number.isFinite(lastPricePerUnit_Number) ? lastPricePerUnit_Number : "",
+
+      SpotMarketUsdPerTroyOunce: Number.isFinite(spotMarketUsdPerOz_NumberOrNull) ? spotMarketUsdPerOz_NumberOrNull : "",
+      SpotRetailUsdPerTroyOunce: Number.isFinite(spotRetailUsdPerOz_NumberOrNull) ? spotRetailUsdPerOz_NumberOrNull : "",
+
+      BiasTowardRetailPercent: biasPercent_Int,
+
+      // Purchase ledger columns left blank for this row type:
+      PurchaseId: "",
+      PurchasedAtUtcIso: "",
+      UnitsPurchased: "",
+      PricePerUnitUsd: "",
+      TotalCostUsd: ""
+    });
+  }
+
+  // ---- Purchase ledger rows
+  for (let j = 0; j < purchaseHistory.length; j += 1) {
+    const record = purchaseHistory[j] || {};
+
+    rows.push({
+      RowType: "PurchaseLedger",
+      ExportedAtUtcIso: new Date().toISOString(),
+
+      HoldingId: record.HoldingId_String || "",
+      DisplayName: FindHolding_DisplayName(record.HoldingId_String || ""),
+      MetalCode: (FindHolding_MetalCode_String(record.HoldingId_String || "") || ""),
+      OuncesPerUnit: (FindHolding_OuncesPerUnit_Number(record.HoldingId_String || "") || ""),
+
+      UnitsOwned: "",
+      TotalPaidUsd: "",
+      LastPricePerUnitUsd: "",
+
+      SpotMarketUsdPerTroyOunce: "",
+      SpotRetailUsdPerTroyOunce: "",
+      BiasTowardRetailPercent: "",
+
+      PurchaseId: record.PurchaseId_String || "",
+      PurchasedAtUtcIso: record.PurchasedAtUtcIso_String || "",
+      UnitsPurchased: record.UnitsPurchased_Number != null ? Number(record.UnitsPurchased_Number) : "",
+      PricePerUnitUsd: record.PricePerUnit_Number != null ? Number(record.PricePerUnit_Number) : "",
+      TotalCostUsd: record.TotalCost_Number != null ? Number(record.TotalCost_Number) : ""
+    });
+  }
+
+  return rows;
+}
+
+function BuildPortfolioExportCsvText() {
+  const headerColumns_Array = [
+    "RowType",
+    "ExportedAtUtcIso",
+
+    "HoldingId",
+    "DisplayName",
+    "MetalCode",
+    "OuncesPerUnit",
+
+    "UnitsOwned",
+    "TotalPaidUsd",
+    "LastPricePerUnitUsd",
+
+    "SpotMarketUsdPerTroyOunce",
+    "SpotRetailUsdPerTroyOunce",
+    "BiasTowardRetailPercent",
+
+    "PurchaseId",
+    "PurchasedAtUtcIso",
+    "UnitsPurchased",
+    "PricePerUnitUsd",
+    "TotalCostUsd"
+  ];
+
+  const rows = BuildPortfolioExportRows_ArrayOfObjects();
+  return ConvertRowsToCsvText(headerColumns_Array, rows);
+}
+
+function HandleDownloadCsvClick() {
+  try {
+    const csvText = BuildPortfolioExportCsvText();
+    const filename = "PreciousMetalsPortfolio_" + GetUtcTimestampForFilename_String() + ".csv";
+    DownloadTextFile_AsBrowserDownload(filename, "text/csv;charset=utf-8", csvText);
+
+    Status_Element.textContent = "Status: CSV exported (" + String(filename) + ")";
+  } catch (err) {
+    Status_Element.textContent = "Status: CSV export failed: " + String(err);
+  }
+}
 
 function FormatCurrency(numberValue) {
   const n = Number(numberValue);
@@ -1419,6 +1645,10 @@ function HandleResetSavedDataClick() {
 RefreshSpotPrices_Button.addEventListener("click", HandleRefreshSpotPricesClick);
 ApplyAllChanges_Button.addEventListener("click", HandleApplyAllChangesClick);
 ResetSavedData_Button.addEventListener("click", HandleResetSavedDataClick);
+
+if (DownloadCsv_Button) {
+  DownloadCsv_Button.addEventListener("click", HandleDownloadCsvClick);
+}
 
 // --------------------------------------------------
 // Bias slider wiring
