@@ -1,3 +1,4 @@
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const metal = String(url.searchParams.get("metal") || "").toUpperCase().trim();
@@ -18,15 +19,50 @@ export async function onRequest(context) {
 
   // “Old references that worked but hit monthly limits”
   // These are added back in a safe/conditional way:
-  if (context && context.env && typeof context.env.METALS_API_KEY === "string" && context.env.METALS_API_KEY.trim().length > 0) {
+  if (
+    context &&
+    context.env &&
+    typeof context.env.METALS_API_KEY === "string" &&
+    context.env.METALS_API_KEY.trim().length > 0
+  ) {
     providers.push(function ProviderInvoker_MetalsApiLayer(m) {
       return FetchFromMetalsApiLayer_Market(m, context.env.METALS_API_KEY);
     });
   }
 
-  if (context && context.env && typeof context.env.GOLDAPI_IO_KEY === "string" && context.env.GOLDAPI_IO_KEY.trim().length > 0) {
+  // ---------------------------------------------
+  // GoldAPI.io Key Support (ENV or Hardcoded)
+  // ---------------------------------------------
+
+  // ✅✅✅ EDIT THIS LINE to paste your real key (optional fallback) ✅✅✅
+  const HARDCODED_GOLDAPI_IO_KEY_PLACEHOLDER = "goldapi-72cmsmlwyskzt-io";
+  // ✅✅✅ END EDIT LINE ✅✅✅
+
+  let resolvedGoldApiKey = null;
+
+  // Priority 1: Environment variable (recommended)
+  if (
+    context &&
+    context.env &&
+    typeof context.env.GOLDAPI_IO_KEY === "string" &&
+    context.env.GOLDAPI_IO_KEY.trim().length > 0
+  ) {
+    resolvedGoldApiKey = context.env.GOLDAPI_IO_KEY.trim();
+  }
+
+  // Priority 2: Hardcoded fallback
+  if (
+    !resolvedGoldApiKey &&
+    typeof HARDCODED_GOLDAPI_IO_KEY_PLACEHOLDER === "string" &&
+    HARDCODED_GOLDAPI_IO_KEY_PLACEHOLDER !== "goldapi-72cmsmlwyskzt-io" &&
+    HARDCODED_GOLDAPI_IO_KEY_PLACEHOLDER.trim().length > 0
+  ) {
+    resolvedGoldApiKey = HARDCODED_GOLDAPI_IO_KEY_PLACEHOLDER.trim();
+  }
+
+  if (resolvedGoldApiKey) {
     providers.push(function ProviderInvoker_GoldApiIo(m) {
-      return FetchFromGoldApiIo_Market(m, context.env.GOLDAPI_IO_KEY);
+      return FetchFromGoldApiIo_Market(m, resolvedGoldApiKey);
     });
   }
 
@@ -35,12 +71,6 @@ export async function onRequest(context) {
       return providerFunction(metal);
     })
   );
-
-  // We want to return:
-  // - retailPriceUsdPerTroyOunce
-  // - marketPriceUsdPerTroyOunce
-  // - priceUsdPerTroyOunce (a single “main” value for compatibility)
-  //   (For now: if both exist, use the median of both; if one exists, use it.)
 
   let retailPriceUsdPerTroyOunce_NumberOrNull = null;
   let marketPriceUsdPerTroyOunce_NumberOrNull = null;
@@ -71,7 +101,6 @@ export async function onRequest(context) {
       continue;
     }
 
-    // rejected
     providersReport_Array.push({
       name: "(unknown)",
       kind: "(unknown)",
@@ -82,11 +111,17 @@ export async function onRequest(context) {
 
   const collectedPrices_Array = [];
 
-  if (Number.isFinite(retailPriceUsdPerTroyOunce_NumberOrNull) && retailPriceUsdPerTroyOunce_NumberOrNull > 0) {
+  if (
+    Number.isFinite(retailPriceUsdPerTroyOunce_NumberOrNull) &&
+    retailPriceUsdPerTroyOunce_NumberOrNull > 0
+  ) {
     collectedPrices_Array.push(retailPriceUsdPerTroyOunce_NumberOrNull);
   }
 
-  if (Number.isFinite(marketPriceUsdPerTroyOunce_NumberOrNull) && marketPriceUsdPerTroyOunce_NumberOrNull > 0) {
+  if (
+    Number.isFinite(marketPriceUsdPerTroyOunce_NumberOrNull) &&
+    marketPriceUsdPerTroyOunce_NumberOrNull > 0
+  ) {
     collectedPrices_Array.push(marketPriceUsdPerTroyOunce_NumberOrNull);
   }
 
@@ -108,19 +143,12 @@ export async function onRequest(context) {
 
   return JsonResponse({
     metal: metal,
-
-    // Compatibility field your app already reads:
     priceUsdPerTroyOunce: mainPrice_Number,
-
     usedCount: collectedPrices_Array.length,
     fetchedOkCount: collectedPrices_Array.length,
     updatedAtUtcIso: new Date().toISOString(),
-
-    // New explicit fields for weighting:
     marketPriceUsdPerTroyOunce: marketPriceUsdPerTroyOunce_NumberOrNull,
     retailPriceUsdPerTroyOunce: retailPriceUsdPerTroyOunce_NumberOrNull,
-
-    // Debug/visibility:
     providers: providersReport_Array
   });
 }
@@ -131,9 +159,10 @@ export async function onRequest(context) {
 
 async function FetchFromGoldPriceOrg_Retail(metal) {
   const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", {
-    cache: "no-store",
-    // Small edge cache to reduce hammering
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (!response.ok) {
@@ -174,12 +203,6 @@ async function FetchFromGoldPriceOrg_Retail(metal) {
 /* -------------------------------------------------- */
 
 async function FetchFromStooq_Market(metal) {
-  // Stooq symbols:
-  // XAUUSD = Gold (ozt) / USD
-  // XAGUSD = Silver (ozt) / USD
-  //
-  // Example: https://stooq.com/q/l/?s=xauusd&i=d
-
   let symbol = null;
 
   if (metal === "XAU") {
@@ -193,8 +216,10 @@ async function FetchFromStooq_Market(metal) {
   const endpointUrl = "https://stooq.com/q/l/?s=" + encodeURIComponent(symbol) + "&i=d";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (!response.ok) {
@@ -203,9 +228,6 @@ async function FetchFromStooq_Market(metal) {
 
   const text = await response.text();
 
-  // CSV format:
-  // Symbol,Date,Time,Open,High,Low,Close,Volume
-  // XAUUSD,2026-02-23,23:00:00,....,....,....,5227.60,0
   const lines = String(text).trim().split(/\r?\n/);
 
   if (lines.length < 2) {
@@ -237,19 +259,7 @@ async function FetchFromStooq_Market(metal) {
 /* -------------------------------------------------- */
 /* Provider 3 — Metals-API (API key; monthly limits)   */
 /* -------------------------------------------------- */
-/*
-  This is the “apilayer / metals-api” style provider.
 
-  Common pattern:
-  - GET https://metals-api.com/api/latest?access_key=KEY&base=USD&symbols=XAU,XAG
-    or
-  - GET https://api.metals.dev/v1/latest?api_key=KEY&currency=USD&unit=toz&metal=gold
-  Different vendors vary.
-
-  The code below targets the widely-seen "metals-api.com/api/latest" format.
-  If your old provider was a slightly different URL/shape, tell me which one and
-  I’ll swap only this function.
-*/
 async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
   const endpointUrl =
     "https://metals-api.com/api/latest" +
@@ -258,8 +268,10 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
     "&symbols=XAU,XAG";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (response.status === 429) {
@@ -272,11 +284,6 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
 
   const json = await response.json();
 
-  // Typical response:
-  // { success: true, base: "USD", rates: { XAU: 0.00019, XAG: 0.023 }, ... }
-  // NOTE: This is often "USD per 1 unit of metal" vs "metal per USD".
-  // Metals-API commonly returns "rates" as: 1 USD -> XAU (ounces).
-  // We want USD per troy ounce, so we invert.
   if (!json || typeof json !== "object" || !json.rates || typeof json.rates !== "object") {
     throw new Error("Metals-API invalid format");
   }
@@ -287,7 +294,6 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
     throw new Error("Metals-API returned invalid rate for " + metal);
   }
 
-  // Invert: (1 USD -> rate ounces) => (1 ounce -> 1/rate USD)
   const priceUsdPerTroyOunce_Number = 1 / rate_Number;
 
   if (!Number.isFinite(priceUsdPerTroyOunce_Number) || priceUsdPerTroyOunce_Number <= 0) {
@@ -304,23 +310,14 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
 /* -------------------------------------------------- */
 /* Provider 4 — GoldAPI.io (API key; monthly limits)   */
 /* -------------------------------------------------- */
-/*
-  goldapi.io endpoints commonly look like:
-  - https://www.goldapi.io/api/XAU/USD
-  - https://www.goldapi.io/api/XAG/USD
-  Header:
-  - x-access-token: YOUR_KEY
 
-  Usually returns:
-  { "price": 2034.12, ... }
-*/
 async function FetchFromGoldApiIo_Market(metal, goldApiIoKey) {
   const endpointUrl = "https://www.goldapi.io/api/" + encodeURIComponent(metal) + "/USD";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true },
+    cf: { cacheTtl: 300 },
     headers: {
+      "Cache-Control": "max-age=0",
       "x-access-token": goldApiIoKey
     }
   });
