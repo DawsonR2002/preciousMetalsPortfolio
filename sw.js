@@ -1,7 +1,7 @@
 "use strict";
 
 // BUMP THIS any time you change index.html/app.js in a way you want to force-update.
-const CacheName_String = "precious-metals-portfolio-cache-v5";
+const CacheName_String = "precious-metals-portfolio-cache-v7";
 
 // Only cache what you actually serve as static files.
 // If you add css/images later, put them here too.
@@ -24,94 +24,87 @@ self.addEventListener("install", function (event) {
 
 self.addEventListener("activate", function (event) {
   event.waitUntil((async function () {
-    // Delete old caches so old HTML/JS can’t come back.
+    // Delete old caches so old app.js doesn't remain offline forever.
     const keys = await caches.keys();
+
     for (const key of keys) {
       if (key !== CacheName_String) {
         await caches.delete(key);
       }
     }
 
-    // Take control of pages right away.
+    // Start controlling open tabs immediately.
     await self.clients.claim();
   })());
 });
 
-function IsNavigationRequest(request) {
-  return request.mode === "navigate";
-}
-
-function IsIndexOrAppJs(requestUrl) {
-  const path = requestUrl.pathname || "";
-  return (
-    path.endsWith("/") ||
-    path.endsWith("/index.html") ||
-    path.endsWith("/app.js")
-  );
-}
-
-function IsApiRequest(requestUrl) {
-  const path = requestUrl.pathname || "";
-  // Your backend is /api/spot
-  return path.indexOf("/api/") >= 0;
-}
-
-async function NetworkFirst(request) {
-  const cache = await caches.open(CacheName_String);
-
-  try {
-    const response = await fetch(request, { cache: "no-store" });
-
-    // Only cache good responses
-    if (response && response.ok) {
-      cache.put(request, response.clone());
-    }
-
-    return response;
-  } catch (err) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    throw err;
-  }
-}
-
-async function CacheFirst(request) {
-  const cache = await caches.open(CacheName_String);
-
-  const cached = await cache.match(request);
-  if (cached) return cached;
-
-  const response = await fetch(request, { cache: "no-store" });
-  if (response && response.ok) {
-    cache.put(request, response.clone());
-  }
-  return response;
-}
-
 self.addEventListener("fetch", function (event) {
   const request = event.request;
 
-  // Only handle GET
-  if (request.method !== "GET") {
+  // Only handle GET requests safely.
+  if (!request || request.method !== "GET") {
     return;
   }
 
   const url = new URL(request.url);
 
-  // IMPORTANT:
-  // Never cache /api/* responses. Always go to network.
-  // This prevents you from getting "stuck" on an old spot payload or an old provider outcome.
-  if (IsApiRequest(url)) {
-    event.respondWith(fetch(request, { cache: "no-store" }));
+  // Only handle same-origin requests.
+  if (url.origin !== self.location.origin) {
     return;
   }
 
-  // For the app shell (index/app.js), do NETWORK-FIRST so refresh gets latest.
-  // For everything else, cache-first is fine.
-  if (IsNavigationRequest(request) || IsIndexOrAppJs(url)) {
-    event.respondWith(NetworkFirst(request));
+  // If this is an API request (spot price backend), prefer network, fallback to cache if available.
+  // (This avoids caching stale API responses aggressively.)
+  if (url.pathname.indexOf("/api/") === 0) {
+    event.respondWith((async function () {
+      try {
+        const networkResponse = await fetch(request);
+        return networkResponse;
+      } catch (err) {
+        const cached = await caches.match(request);
+        if (cached) {
+          return cached;
+        }
+        throw err;
+      }
+    })());
     return;
   }
 
-  event.respondWith(CacheFirst(request));
+  // Navigation requests: try network, fallback to cached index.html for offline.
+  if (request.mode === "navigate") {
+    event.respondWith((async function () {
+      try {
+        const networkResponse = await fetch(request);
+        return networkResponse;
+      } catch (err) {
+        const cachedIndex = await caches.match("./index.html");
+        if (cachedIndex) {
+          return cachedIndex;
+        }
+        throw err;
+      }
+    })());
+    return;
+  }
+
+  // Static assets: cache-first, network fallback.
+  event.respondWith((async function () {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await fetch(request);
+
+    // Opportunistically cache same-origin successful responses.
+    try {
+      const cache = await caches.open(CacheName_String);
+      cache.put(request, response.clone());
+    } catch {
+      // If caching fails, still return response.
+    }
+
+    return response;
+  })());
 });

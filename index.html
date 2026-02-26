@@ -6,14 +6,14 @@
   <title>Precious Metals Portfolio</title>
 
   <!-- Prevent search engine indexing -->
-  <meta name="robots" content="noindex, nofollow">
+  <meta name="robots" content="noindex, nofollow" />
 
   <!-- PWA + iPhone support -->
-  <meta name="theme-color" content="#0d2f6b">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#0d2f6b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest" />
 
   <style>
     body {
@@ -195,16 +195,17 @@
     Reset Saved Data
   </button>
 
-  
   <button id="DownloadCsv_Button" type="button">
     Download CSV
   </button>
 
-<hr>
+  <hr>
+
   <h2>Totals</h2>
   <div id="Totals_Element"></div>
 
   <hr>
+
   <!-- === Added Bias UI Section (Option 3) === -->
   <h2>Pricing Bias</h2>
 
@@ -248,12 +249,26 @@
   <h2>Holdings</h2>
   <div id="HoldingsContainer_Element"></div>
 
-
-
   <h2>Purchase History</h2>
   <div id="PurchaseHistoryContainer_Element"></div>
 
   <script src="app.js"></script>
+
+  <!-- Service Worker Registration (required for offline use) -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker
+          .register("./sw.js")
+          .then(function (registration) {
+            console.log("Service Worker registered successfully:", registration);
+          })
+          .catch(function (error) {
+            console.log("Service Worker registration failed:", error);
+          });
+      });
+    }
+  </script>
 
 </body>
 </html>

@@ -1,9 +1,10 @@
 {
-  "name": "Silver Test App",
-  "short_name": "Silver",
-  "start_url": ".",
+  "name": "Precious Metals Portfolio",
+  "short_name": "Metals",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "theme_color": "#0d2f6b",
   "icons": []
 }

@@ -121,7 +121,157 @@ const HoldingsCatalog_Array = [
       { Units: 64, PricePerUnit: 426.96, TotalPaid_LimitedToSpecificPurchases: 27325.44 }
     ],
     MarketPricePerUnit_Default_Number: 807.06
-  }
+  },
+
+  {
+    HoldingId: "ninety_percent_silver_coins_fifty_dollar_face_value_apmex",
+    DisplayName: "APMEX 90% Silver Coins (Quarters) - $50 Face Value Bag: 04/30/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 0.18,
+    Purchases: [
+      { Units: 200, PricePerUnit: 5.40, TotalPaid_LimitedToSpecificPurchases: 1080.32 }
+    ],
+    MarketPricePerUnit_Default_Number: 14.60
+  },
+
+  {
+    HoldingId: "silver_bar_5oz_apmex_Jesus",
+    DisplayName: "APMEX 5oz Silver Bar - Jesus: 05/08/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 5.0,
+    Purchases: [
+      { Units: 2, PricePerUnit: 169.43, TotalPaid_LimitedToSpecificPurchases: 338.86 }
+    ],
+    MarketPricePerUnit_Default_Number: 403.53
+  },
+
+  {
+    HoldingId: "silver_bar_10oz_apmex_Jesus",
+    DisplayName: "APMEX 10oz Silver Bar - Jesus: 05/08/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 10.0,
+    Purchases: [
+      { Units: 1, PricePerUnit: 335.73, TotalPaid_LimitedToSpecificPurchases: 335.73 }
+    ],
+    MarketPricePerUnit_Default_Number: 807.06
+  },
+
+    {
+    HoldingId: "silver_bar_1oz_apmex_purchase_set_index_0",
+    DisplayName: "1 oz Silver Bar - APMEX: 05/24/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 10, PricePerUnit: 34.23, TotalPaid_LimitedToSpecificPurchases: 342.30 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+  {
+    HoldingId: "silver_bar_1oz_apmex_purchase_set_index_2",
+    DisplayName: "1 oz Silver Bar - APMEX: 06/12/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 10, PricePerUnit: 32.99, TotalPaid_LimitedToSpecificPurchases: 329.90 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+  {
+    HoldingId: "silver_bar_1oz_apmex_walmart_purchase_set_index_0",
+    DisplayName: "1 oz Silver Bar - APMEX - Walmart: 06/12/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 20, PricePerUnit: 32.79, TotalPaid_LimitedToSpecificPurchases: 655.80 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+    {
+    HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_0",
+    DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 07/31/2024",
+    MetalCode_String: "XAU",
+    OuncesPerUnit_Number: 0.5,
+    Purchases: [
+      { Units: 1, PricePerUnit: 1301.38, TotalPaid_LimitedToSpecificPurchases: 1301.38 }
+    ],
+    MarketPricePerUnit_Default_Number: 2505.64
+  },
+
+  {
+    HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_1",
+    DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/06/2024",
+    MetalCode_String: "XAU",
+    OuncesPerUnit_Number: 0.5,
+    Purchases: [
+      { Units: 1, PricePerUnit: 1293.35, TotalPaid_LimitedToSpecificPurchases: 1293.35 }
+    ],
+    MarketPricePerUnit_Default_Number: 2505.64
+  },
+
+  {
+    HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_2",
+    DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/09/2024",
+    MetalCode_String: "XAU",
+    OuncesPerUnit_Number: 0.5,
+    Purchases: [
+      { Units: 1, PricePerUnit: 1314.09, TotalPaid_LimitedToSpecificPurchases: 1314.09 }
+    ],
+    MarketPricePerUnit_Default_Number: 2505.64
+  },
+
+    {
+    HoldingId: "silver_bar_1oz_apmex_purchase_set_index_1",
+    DisplayName: "1 oz Silver Bar - APMEX: 10/17/2025",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 10, PricePerUnit: 58.80, TotalPaid_LimitedToSpecificPurchases: 588.80 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+    {
+    HoldingId: "silver_round_1oz_apmex_walmart_purchase_set_index_1",
+    DisplayName: "1 oz Silver Round - APMEX - Walmart: 05/08/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 10, PricePerUnit: 29.63, TotalPaid_LimitedToSpecificPurchases: 296.30 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+  {
+    HoldingId: "silver_round_1oz_apmex_walmart_purchase_set_index_0",
+    DisplayName: "1 oz Silver Round - APMEX - Walmart: 05/24/2024",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 20, PricePerUnit: 33.13, TotalPaid_LimitedToSpecificPurchases: 662.60 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+  {
+    HoldingId: "silver_round_1oz_apmex_purchase_set_index_0",
+    DisplayName: "1 oz Silver Round - APMEX: 01/14/2026",
+    MetalCode_String: "XAG",
+    OuncesPerUnit_Number: 1.0,
+    Purchases: [
+      { Units: 10, PricePerUnit: 98.22, TotalPaid_LimitedToSpecificPurchases: 982.20 }
+    ],
+    MarketPricePerUnit_Default_Number: 80.71
+  },
+
+    
+
+
+
+
+  
 ];
 
 // --------------------------------------------------
@@ -241,18 +391,29 @@ function SaveOwnedState_ByHoldingId_Object(ownedStateByHoldingId_Object) {
 }
 
 function EnsureOwnedStateSeeded_FromCatalogIfMissing() {
-  const existing = LoadOwnedState_ByHoldingId_Object();
-  if (existing != null) {
-    return;
+  // IMPORTANT:
+  // We must support adding new HoldingsCatalog_Array entries over time.
+  // That means: if owned state already exists, we MERGE missing HoldingIds
+  // instead of returning early.
+
+  let existing = LoadOwnedState_ByHoldingId_Object();
+
+  if (existing == null) {
+    existing = {};
   }
 
-  const seeded = {};
+  let wasAnythingAdded_Boolean = false;
 
   for (const holding of HoldingsCatalog_Array) {
-    seeded[holding.HoldingId] = CreateOwnedState_DefaultForHolding_FromCatalog(holding);
+    if (existing[holding.HoldingId] == null) {
+      existing[holding.HoldingId] = CreateOwnedState_DefaultForHolding_FromCatalog(holding);
+      wasAnythingAdded_Boolean = true;
+    }
   }
 
-  SaveOwnedState_ByHoldingId_Object(seeded);
+  if (wasAnythingAdded_Boolean) {
+    SaveOwnedState_ByHoldingId_Object(existing);
+  }
 }
 
 // --------------------------------------------------
@@ -616,6 +777,45 @@ function GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(ownedObject, holdin
   return null;
 }
 
+// --------------------------------------------------
+// Spot-first effective price logic (NEW)
+// --------------------------------------------------
+
+function GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
+  ownedObject,
+  holdingObject,
+  spotCacheObject
+) {
+  if (!holdingObject) return null;
+
+  // Try spot first
+  const spotPerOunce = GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject);
+  const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holdingObject);
+
+  if (
+    spotPerOunce != null &&
+    Number.isFinite(spotPerOunce) &&
+    spotPerOunce > 0 &&
+    ouncesPerUnit > 0
+  ) {
+    return spotPerOunce * ouncesPerUnit;
+  }
+
+  // Fallback to last-known price
+  const lastKnown =
+    Number(
+      ownedObject && ownedObject.LastKnownMarketPricePerUnit_Number != null
+        ? ownedObject.LastKnownMarketPricePerUnit_Number
+        : NaN
+    );
+
+  if (Number.isFinite(lastKnown) && lastKnown > 0) {
+    return lastKnown;
+  }
+
+  return null;
+}
+
 function BuildPortfolioExportRows_ArrayOfObjects() {
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
 
@@ -645,10 +845,17 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     const totalPaidOk = Number.isFinite(totalPaidOwnedUsd_Number);
     const lastPriceOk = Number.isFinite(lastKnownMarketPricePerUnitUsd_Number);
 
+    const effectivePricePerUnit =
+    GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
+        owned,
+        holding,
+        spotCache
+    );
+
     const valueOfOwnedUsd_NumberOrNull =
-      (unitsOwnedOk && lastPriceOk)
-        ? (unitsOwned_Number * lastKnownMarketPricePerUnitUsd_Number)
-        : null;
+    (unitsOwnedOk && effectivePricePerUnit != null)
+    ? (unitsOwned_Number * effectivePricePerUnit)
+    : null;
 
     const netGainLossUsd_NumberOrNull =
       (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull) && totalPaidOk)
@@ -1396,7 +1603,9 @@ function RenderHeaderFromSpotCache() {
 
 function RenderHoldingsTable() {
   const drafts = LoadDraftEdits_ByHoldingId_Object();
-  const ownedState = LoadOwnedState_ByHoldingId_Object();
+  // ownedState should exist after EnsureOwnedStateSeeded..., but we guard anyway
+  // to prevent a hard crash if localStorage was partially cleared.
+  const ownedState = LoadOwnedState_ByHoldingId_Object() || {};
   const spotCache = LoadSpotCacheObject();
 
   for (const key of Object.keys(CurrentRenderedInputs_ByHoldingId_Object)) {
@@ -1438,7 +1647,11 @@ function RenderHoldingsTable() {
   tableElement.appendChild(headerRow);
 
   for (const holding of HoldingsCatalog_Array) {
-    const owned = ownedState[holding.HoldingId];
+    // Guard against missing owned entry for newly added catalog rows
+    // (or if localStorage was edited / partially cleared).
+    const owned = ownedState[holding.HoldingId] != null
+      ? ownedState[holding.HoldingId]
+      : CreateOwnedState_DefaultForHolding_FromCatalog(holding);
 
     const unitsOwned_ReadOnly = Number(owned.UnitsOwned_Number) || 0;
     const totalPaidOwned_ReadOnly = Number(owned.TotalPaidOwned_Number) || 0;
@@ -1452,7 +1665,18 @@ function RenderHoldingsTable() {
 
     const totalCostOfPurchase = draftUnitsPurchase * draftMarketPrice;
 
-    const valueOfOwned = unitsOwned_ReadOnly * lastKnownMarketPricePerUnit_ReadOnly;
+    const preferredPricePerUnit =
+    GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
+        owned,
+        holding,
+        spotCache
+    );
+
+    const valueOfOwned =
+        preferredPricePerUnit != null
+        ? unitsOwned_ReadOnly * preferredPricePerUnit
+        : 0;
+
     const gainLossOwned = valueOfOwned - totalPaidOwned_ReadOnly;
 
     const spotPricePerOunce = GetSpotPricePerOunce_ForHolding(holding, spotCache);
