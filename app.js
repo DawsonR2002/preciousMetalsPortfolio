@@ -192,7 +192,7 @@ const HoldingsCatalog_Array = [
     {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_0",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 07/31/2024",
-    MetalCode_String: "XAU",
+    MetalCode_String: "XAG",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1301.38, TotalPaid_LimitedToSpecificPurchases: 1301.38 }
@@ -203,7 +203,7 @@ const HoldingsCatalog_Array = [
   {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_1",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/06/2024",
-    MetalCode_String: "XAU",
+    MetalCode_String: "XAG",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1293.35, TotalPaid_LimitedToSpecificPurchases: 1293.35 }
@@ -214,7 +214,7 @@ const HoldingsCatalog_Array = [
   {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_2",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/09/2024",
-    MetalCode_String: "XAU",
+    MetalCode_String: "XAG",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1314.09, TotalPaid_LimitedToSpecificPurchases: 1314.09 }
@@ -777,45 +777,6 @@ function GetOwnedLastPricePerUnitUsd_ForHolding_NumberOrNull(ownedObject, holdin
   return null;
 }
 
-// --------------------------------------------------
-// Spot-first effective price logic (NEW)
-// --------------------------------------------------
-
-function GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
-  ownedObject,
-  holdingObject,
-  spotCacheObject
-) {
-  if (!holdingObject) return null;
-
-  // Try spot first
-  const spotPerOunce = GetSpotPricePerOunce_ForHolding(holdingObject, spotCacheObject);
-  const ouncesPerUnit = GetOuncesPerUnit_ForHolding(holdingObject);
-
-  if (
-    spotPerOunce != null &&
-    Number.isFinite(spotPerOunce) &&
-    spotPerOunce > 0 &&
-    ouncesPerUnit > 0
-  ) {
-    return spotPerOunce * ouncesPerUnit;
-  }
-
-  // Fallback to last-known price
-  const lastKnown =
-    Number(
-      ownedObject && ownedObject.LastKnownMarketPricePerUnit_Number != null
-        ? ownedObject.LastKnownMarketPricePerUnit_Number
-        : NaN
-    );
-
-  if (Number.isFinite(lastKnown) && lastKnown > 0) {
-    return lastKnown;
-  }
-
-  return null;
-}
-
 function BuildPortfolioExportRows_ArrayOfObjects() {
   EnsureOwnedStateSeeded_FromCatalogIfMissing();
 
@@ -845,17 +806,10 @@ function BuildPortfolioExportRows_ArrayOfObjects() {
     const totalPaidOk = Number.isFinite(totalPaidOwnedUsd_Number);
     const lastPriceOk = Number.isFinite(lastKnownMarketPricePerUnitUsd_Number);
 
-    const effectivePricePerUnit =
-    GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
-        owned,
-        holding,
-        spotCache
-    );
-
     const valueOfOwnedUsd_NumberOrNull =
-    (unitsOwnedOk && effectivePricePerUnit != null)
-    ? (unitsOwned_Number * effectivePricePerUnit)
-    : null;
+      (unitsOwnedOk && lastPriceOk)
+        ? (unitsOwned_Number * lastKnownMarketPricePerUnitUsd_Number)
+        : null;
 
     const netGainLossUsd_NumberOrNull =
       (valueOfOwnedUsd_NumberOrNull != null && Number.isFinite(valueOfOwnedUsd_NumberOrNull) && totalPaidOk)
@@ -1250,83 +1204,62 @@ function CreateSyntheticMarketOrRetailIfMissing_Object(marketOrNull, retailOrNul
 // --------------------------------------------------
 
 async function FetchSpotForMetalAsync(metalCode) {
+  const url = BackendBaseUrl_String + "/api/spot?metal=" + encodeURIComponent(metalCode);
 
-    const url = BackendBaseUrl_String + "/api/spot?metal=" + encodeURIComponent(metalCode);
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("HTTP " + response.status + " for " + metalCode);
+  }
 
-    const response = await fetch(url, { method: "GET", cache: "no-store" });
+  const json = await response.json();
 
-    if (!response.ok) {
-        throw new Error("HTTP " + response.status + " for " + metalCode);
-    }
+  // --------------------------------------------------
+  // Accept either schema:
+  // - Legacy: priceUsdPerTroyOunce
+  // - New: marketPriceUsdPerTroyOunce / retailPriceUsdPerTroyOunce
+  // --------------------------------------------------
 
-    const json = await response.json();
+  const unifiedPriceRaw = (json && json.priceUsdPerTroyOunce != null) ? Number(json.priceUsdPerTroyOunce) : NaN;
+  const marketPriceRaw = (json && json.marketPriceUsdPerTroyOunce != null) ? Number(json.marketPriceUsdPerTroyOunce) : NaN;
+  const retailPriceRaw = (json && json.retailPriceUsdPerTroyOunce != null) ? Number(json.retailPriceUsdPerTroyOunce) : NaN;
 
-    // -------------------------------
-    // Read all possible price fields
-    // -------------------------------
+  const unifiedOk = Number.isFinite(unifiedPriceRaw) && unifiedPriceRaw > 0;
+  const marketOk = Number.isFinite(marketPriceRaw) && marketPriceRaw > 0;
+  const retailOk = Number.isFinite(retailPriceRaw) && retailPriceRaw > 0;
 
-    const unifiedPrice =
-        (json.priceUsdPerTroyOunce != null)
-            ? Number(json.priceUsdPerTroyOunce)
-            : null;
+  // We require at least one usable price
+  if (!unifiedOk && !marketOk && !retailOk) {
+    throw new Error("Invalid spot price payload for " + metalCode);
+  }
 
-    const marketPrice =
-        (json.marketPriceUsdPerTroyOunce != null)
-            ? Number(json.marketPriceUsdPerTroyOunce)
-            : null;
+  // Keep the legacy field populated for compatibility:
+  // prefer retail, else market, else unified.
+  const effectiveUnifiedPrice =
+    retailOk
+      ? retailPriceRaw
+      : marketOk
+        ? marketPriceRaw
+        : unifiedOk
+          ? unifiedPriceRaw
+          : null;
 
-    const retailPrice =
-        (json.retailPriceUsdPerTroyOunce != null)
-            ? Number(json.retailPriceUsdPerTroyOunce)
-            : null;
+  const usedCount = Number(json.usedCount);
+  const fetchedOkCount = Number(json.fetchedOkCount);
 
-    const unifiedPriceOk = (Number.isFinite(unifiedPrice) && unifiedPrice > 0);
-    const marketPriceOk = (Number.isFinite(marketPrice) && marketPrice > 0);
-    const retailPriceOk = (Number.isFinite(retailPrice) && retailPrice > 0);
+  const updatedAtUtcIso =
+    (json.updatedAtUtcIso != null && String(json.updatedAtUtcIso).trim() !== "")
+      ? String(json.updatedAtUtcIso)
+      : null;
 
-    // -------------------------------
-    // Validate: at least ONE must exist
-    // -------------------------------
-
-    if (!unifiedPriceOk && !marketPriceOk && !retailPriceOk) {
-        throw new Error("Invalid spot price payload for " + metalCode);
-    }
-
-    // -------------------------------
-    // Pick a "best" unified value:
-    // prefer retail, else market, else unified
-    // -------------------------------
-
-    const effectiveUnifiedPrice =
-        retailPriceOk
-            ? retailPrice
-            : marketPriceOk
-                ? marketPrice
-                : unifiedPriceOk
-                    ? unifiedPrice
-                    : null;
-
-    const usedCount = Number(json.usedCount);
-    const fetchedOkCount = Number(json.fetchedOkCount);
-
-    const updatedAtUtcIso =
-        (json.updatedAtUtcIso != null && String(json.updatedAtUtcIso).trim() !== "")
-            ? String(json.updatedAtUtcIso)
-            : null;
-
-    return {
-        metal: metalCode,
-
-        // This keeps the rest of your app working no matter which schema the backend returns
-        priceUsdPerTroyOunce: effectiveUnifiedPrice,
-
-        marketPriceUsdPerTroyOunce: marketPriceOk ? marketPrice : null,
-        retailPriceUsdPerTroyOunce: retailPriceOk ? retailPrice : null,
-
-        usedCount: Number.isFinite(usedCount) ? usedCount : null,
-        fetchedOkCount: Number.isFinite(fetchedOkCount) ? fetchedOkCount : null,
-        updatedAtUtcIso: updatedAtUtcIso
-    };
+  return {
+    metal: metalCode,
+    priceUsdPerTroyOunce: effectiveUnifiedPrice,
+    marketPriceUsdPerTroyOunce: marketOk ? marketPriceRaw : null,
+    retailPriceUsdPerTroyOunce: retailOk ? retailPriceRaw : null,
+    usedCount: Number.isFinite(usedCount) ? usedCount : null,
+    fetchedOkCount: Number.isFinite(fetchedOkCount) ? fetchedOkCount : null,
+    updatedAtUtcIso: updatedAtUtcIso
+  };
 }
 
 async function RefreshSpotCacheFromBackendAsync() {
@@ -1707,18 +1640,7 @@ function RenderHoldingsTable() {
 
     const totalCostOfPurchase = draftUnitsPurchase * draftMarketPrice;
 
-    const preferredPricePerUnit =
-    GetOwnedEffectivePricePerUnitUsd_SpotFirst_ForHolding_NumberOrNull(
-        owned,
-        holding,
-        spotCache
-    );
-
-    const valueOfOwned =
-        preferredPricePerUnit != null
-        ? unitsOwned_ReadOnly * preferredPricePerUnit
-        : 0;
-
+    const valueOfOwned = unitsOwned_ReadOnly * lastKnownMarketPricePerUnit_ReadOnly;
     const gainLossOwned = valueOfOwned - totalPaidOwned_ReadOnly;
 
     const spotPricePerOunce = GetSpotPricePerOunce_ForHolding(holding, spotCache);
