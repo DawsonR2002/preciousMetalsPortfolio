@@ -1256,24 +1256,19 @@ async function FetchSpotForMetalAsync(metalCode) {
     const response = await fetch(url, { method: "GET", cache: "no-store" });
 
     if (!response.ok) {
-        throw new Error("HTTP " + response.status);
+        throw new Error("HTTP " + response.status + " for " + metalCode);
     }
 
     const json = await response.json();
 
-    // --------------------------------------------------
-    // Required primary price (for compatibility + fallback)
-    // --------------------------------------------------
+    // -------------------------------
+    // Read all possible price fields
+    // -------------------------------
 
-    const price = Number(json.priceUsdPerTroyOunce);
-
-    if (!Number.isFinite(price) || price <= 0) {
-        throw new Error("Invalid spot price payload for " + metalCode);
-    }
-
-    // --------------------------------------------------
-    // Optional separated market / retail prices
-    // --------------------------------------------------
+    const unifiedPrice =
+        (json.priceUsdPerTroyOunce != null)
+            ? Number(json.priceUsdPerTroyOunce)
+            : null;
 
     const marketPrice =
         (json.marketPriceUsdPerTroyOunce != null)
@@ -1285,50 +1280,51 @@ async function FetchSpotForMetalAsync(metalCode) {
             ? Number(json.retailPriceUsdPerTroyOunce)
             : null;
 
-    // --------------------------------------------------
-    // Meta info
-    // --------------------------------------------------
+    const unifiedPriceOk = (Number.isFinite(unifiedPrice) && unifiedPrice > 0);
+    const marketPriceOk = (Number.isFinite(marketPrice) && marketPrice > 0);
+    const retailPriceOk = (Number.isFinite(retailPrice) && retailPrice > 0);
+
+    // -------------------------------
+    // Validate: at least ONE must exist
+    // -------------------------------
+
+    if (!unifiedPriceOk && !marketPriceOk && !retailPriceOk) {
+        throw new Error("Invalid spot price payload for " + metalCode);
+    }
+
+    // -------------------------------
+    // Pick a "best" unified value:
+    // prefer retail, else market, else unified
+    // -------------------------------
+
+    const effectiveUnifiedPrice =
+        retailPriceOk
+            ? retailPrice
+            : marketPriceOk
+                ? marketPrice
+                : unifiedPriceOk
+                    ? unifiedPrice
+                    : null;
 
     const usedCount = Number(json.usedCount);
     const fetchedOkCount = Number(json.fetchedOkCount);
 
     const updatedAtUtcIso =
-        (json.updatedAtUtcIso != null &&
-         String(json.updatedAtUtcIso).trim() !== "")
+        (json.updatedAtUtcIso != null && String(json.updatedAtUtcIso).trim() !== "")
             ? String(json.updatedAtUtcIso)
             : null;
-
-    // --------------------------------------------------
-    // Return normalized object
-    // --------------------------------------------------
 
     return {
         metal: metalCode,
 
-        // Primary unified price (used in some parts of your UI)
-        priceUsdPerTroyOunce: price,
+        // This keeps the rest of your app working no matter which schema the backend returns
+        priceUsdPerTroyOunce: effectiveUnifiedPrice,
 
-        // Optional separated values
-        marketPriceUsdPerTroyOunce:
-            (Number.isFinite(marketPrice) && marketPrice > 0)
-                ? marketPrice
-                : null,
+        marketPriceUsdPerTroyOunce: marketPriceOk ? marketPrice : null,
+        retailPriceUsdPerTroyOunce: retailPriceOk ? retailPrice : null,
 
-        retailPriceUsdPerTroyOunce:
-            (Number.isFinite(retailPrice) && retailPrice > 0)
-                ? retailPrice
-                : null,
-
-        usedCount:
-            Number.isFinite(usedCount)
-                ? usedCount
-                : null,
-
-        fetchedOkCount:
-            Number.isFinite(fetchedOkCount)
-                ? fetchedOkCount
-                : null,
-
+        usedCount: Number.isFinite(usedCount) ? usedCount : null,
+        fetchedOkCount: Number.isFinite(fetchedOkCount) ? fetchedOkCount : null,
         updatedAtUtcIso: updatedAtUtcIso
     };
 }
