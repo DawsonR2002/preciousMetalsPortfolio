@@ -192,7 +192,7 @@ const HoldingsCatalog_Array = [
     {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_0",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 07/31/2024",
-    MetalCode_String: "XAG",
+    MetalCode_String: "XAU",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1301.38, TotalPaid_LimitedToSpecificPurchases: 1301.38 }
@@ -203,7 +203,7 @@ const HoldingsCatalog_Array = [
   {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_1",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/06/2024",
-    MetalCode_String: "XAG",
+    MetalCode_String: "XAU",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1293.35, TotalPaid_LimitedToSpecificPurchases: 1293.35 }
@@ -214,7 +214,7 @@ const HoldingsCatalog_Array = [
   {
     HoldingId: "half_oz_gold_american_eagle_25_dollar_coin_bu_random_year_index_2",
     DisplayName: "1/2 oz Gold American Eagle $25 Coin BU (Random Year) BE LLC: 08/09/2024",
-    MetalCode_String: "XAG",
+    MetalCode_String: "XAU",
     OuncesPerUnit_Number: 0.5,
     Purchases: [
       { Units: 1, PricePerUnit: 1314.09, TotalPaid_LimitedToSpecificPurchases: 1314.09 }
