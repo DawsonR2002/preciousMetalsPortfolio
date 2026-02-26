@@ -174,7 +174,7 @@ async function FetchFromGoldPriceOrg_Retail(metal) {
   const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", {
     cache: "no-store",
     // Small edge cache to reduce hammering
-    cf: { cacheTtl: 300, cacheEverything: true }
+    //cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (!response.ok) {
@@ -235,7 +235,7 @@ async function FetchFromStooq_Market(metal) {
 
   const response = await fetch(endpointUrl, {
     cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true }
+    //cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (!response.ok) {
@@ -296,7 +296,7 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
 
   const response = await fetch(endpointUrl, {
     cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true }
+    //cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (response.status === 429) {
@@ -351,7 +351,7 @@ async function FetchFromGoldApiIo_Market(metal, goldApiIoKey) {
 
   const response = await fetch(endpointUrl, {
     cache: "no-store",
-    cf: { cacheTtl: 300, cacheEverything: true },
+    //cf: { cacheTtl: 300, cacheEverything: true },
     headers: {
       "x-access-token": goldApiIoKey
     }
