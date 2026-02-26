@@ -1250,41 +1250,87 @@ function CreateSyntheticMarketOrRetailIfMissing_Object(marketOrNull, retailOrNul
 // --------------------------------------------------
 
 async function FetchSpotForMetalAsync(metalCode) {
-  const url = BackendBaseUrl_String + "/api/spot?metal=" + encodeURIComponent(metalCode);
 
-  const response = await fetch(url, { method: "GET", cache: "no-store" });
+    const url = BackendBaseUrl_String + "/api/spot?metal=" + encodeURIComponent(metalCode);
 
-  if (!response.ok) {
-    throw new Error("HTTP " + response.status);
-  }
+    const response = await fetch(url, { method: "GET", cache: "no-store" });
 
-  const json = await response.json();
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+    }
 
-  const price = Number(json.priceUsdPerTroyOunce);
-  if (!Number.isFinite(price) || price <= 0) {
-    throw new Error("Invalid spot price payload for " + metalCode);
-  }
+    const json = await response.json();
 
-  const usedCount = Number(json.usedCount);
-  const fetchedOkCount = Number(json.fetchedOkCount);
+    // --------------------------------------------------
+    // Required primary price (for compatibility + fallback)
+    // --------------------------------------------------
 
-  const updatedAtUtcIso =
-    (json.updatedAtUtcIso != null && String(json.updatedAtUtcIso).trim() !== "")
-      ? String(json.updatedAtUtcIso)
-      : null;
+    const price = Number(json.priceUsdPerTroyOunce);
 
-  const marketPrice = (json.marketPriceUsdPerTroyOunce != null) ? Number(json.marketPriceUsdPerTroyOunce) : null;
-  const retailPrice = (json.retailPriceUsdPerTroyOunce != null) ? Number(json.retailPriceUsdPerTroyOunce) : null;
+    if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("Invalid spot price payload for " + metalCode);
+    }
 
-  return {
-    metal: metalCode,
-    priceUsdPerTroyOunce: price,
-    marketPriceUsdPerTroyOunce: (Number.isFinite(marketPrice) && marketPrice > 0) ? marketPrice : null,
-    retailPriceUsdPerTroyOunce: (Number.isFinite(retailPrice) && retailPrice > 0) ? retailPrice : null,
-    usedCount: Number.isFinite(usedCount) ? usedCount : null,
-    fetchedOkCount: Number.isFinite(fetchedOkCount) ? fetchedOkCount : null,
-    updatedAtUtcIso: updatedAtUtcIso
-  };
+    // --------------------------------------------------
+    // Optional separated market / retail prices
+    // --------------------------------------------------
+
+    const marketPrice =
+        (json.marketPriceUsdPerTroyOunce != null)
+            ? Number(json.marketPriceUsdPerTroyOunce)
+            : null;
+
+    const retailPrice =
+        (json.retailPriceUsdPerTroyOunce != null)
+            ? Number(json.retailPriceUsdPerTroyOunce)
+            : null;
+
+    // --------------------------------------------------
+    // Meta info
+    // --------------------------------------------------
+
+    const usedCount = Number(json.usedCount);
+    const fetchedOkCount = Number(json.fetchedOkCount);
+
+    const updatedAtUtcIso =
+        (json.updatedAtUtcIso != null &&
+         String(json.updatedAtUtcIso).trim() !== "")
+            ? String(json.updatedAtUtcIso)
+            : null;
+
+    // --------------------------------------------------
+    // Return normalized object
+    // --------------------------------------------------
+
+    return {
+        metal: metalCode,
+
+        // Primary unified price (used in some parts of your UI)
+        priceUsdPerTroyOunce: price,
+
+        // Optional separated values
+        marketPriceUsdPerTroyOunce:
+            (Number.isFinite(marketPrice) && marketPrice > 0)
+                ? marketPrice
+                : null,
+
+        retailPriceUsdPerTroyOunce:
+            (Number.isFinite(retailPrice) && retailPrice > 0)
+                ? retailPrice
+                : null,
+
+        usedCount:
+            Number.isFinite(usedCount)
+                ? usedCount
+                : null,
+
+        fetchedOkCount:
+            Number.isFinite(fetchedOkCount)
+                ? fetchedOkCount
+                : null,
+
+        updatedAtUtcIso: updatedAtUtcIso
+    };
 }
 
 async function RefreshSpotCacheFromBackendAsync() {
