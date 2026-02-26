@@ -171,10 +171,15 @@ export async function onRequest(context) {
 /* -------------------------------------------------- */
 
 async function FetchFromGoldPriceOrg_Retail(metal) {
+
+  // IMPORTANT:
+  // - DO NOT use: cache: "no-store" together with cf.cacheTtl
+  // - Cloudflare throws: "CacheTtl ... is not compatible with cache: no-store header."
+  // We keep edge caching (cacheTtl) so we don't hammer the provider.
+
   const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", {
-    cache: "no-store",
     // Small edge cache to reduce hammering
-    //cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (!response.ok) {
@@ -234,8 +239,7 @@ async function FetchFromStooq_Market(metal) {
   const endpointUrl = "https://stooq.com/q/l/?s=" + encodeURIComponent(symbol) + "&i=d";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    //cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (!response.ok) {
@@ -295,8 +299,7 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
     "&symbols=XAU,XAG";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    //cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (response.status === 429) {
@@ -350,8 +353,7 @@ async function FetchFromGoldApiIo_Market(metal, goldApiIoKey) {
   const endpointUrl = "https://www.goldapi.io/api/" + encodeURIComponent(metal) + "/USD";
 
   const response = await fetch(endpointUrl, {
-    cache: "no-store",
-    //cf: { cacheTtl: 300, cacheEverything: true },
+    cf: { cacheTtl: 300, cacheEverything: true },
     headers: {
       "x-access-token": goldApiIoKey
     }
