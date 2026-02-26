@@ -71,12 +71,6 @@ export async function onRequest(context) {
     })
   );
 
-  // We want to return:
-  // - retailPriceUsdPerTroyOunce
-  // - marketPriceUsdPerTroyOunce
-  // - priceUsdPerTroyOunce (a single “main” value for compatibility)
-  //   (For now: if both exist, use the median of both; if one exists, use it.)
-
   let retailPriceUsdPerTroyOunce_NumberOrNull = null;
   let marketPriceUsdPerTroyOunce_NumberOrNull = null;
 
@@ -106,7 +100,6 @@ export async function onRequest(context) {
       continue;
     }
 
-    // rejected
     providersReport_Array.push({
       name: "(unknown)",
       kind: "(unknown)",
@@ -149,19 +142,12 @@ export async function onRequest(context) {
 
   return JsonResponse({
     metal: metal,
-
-    // Compatibility field your app already reads:
     priceUsdPerTroyOunce: mainPrice_Number,
-
     usedCount: collectedPrices_Array.length,
     fetchedOkCount: collectedPrices_Array.length,
     updatedAtUtcIso: new Date().toISOString(),
-
-    // New explicit fields for weighting:
     marketPriceUsdPerTroyOunce: marketPriceUsdPerTroyOunce_NumberOrNull,
     retailPriceUsdPerTroyOunce: retailPriceUsdPerTroyOunce_NumberOrNull,
-
-    // Debug/visibility:
     providers: providersReport_Array
   });
 }
@@ -171,15 +157,11 @@ export async function onRequest(context) {
 /* -------------------------------------------------- */
 
 async function FetchFromGoldPriceOrg_Retail(metal) {
-
-  // IMPORTANT:
-  // - DO NOT use: cache: "no-store" together with cf.cacheTtl
-  // - Cloudflare throws: "CacheTtl ... is not compatible with cache: no-store header."
-  // We keep edge caching (cacheTtl) so we don't hammer the provider.
-
   const response = await fetch("https://data-asg.goldprice.org/dbXRates/USD", {
-    // Small edge cache to reduce hammering
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (!response.ok) {
@@ -220,12 +202,6 @@ async function FetchFromGoldPriceOrg_Retail(metal) {
 /* -------------------------------------------------- */
 
 async function FetchFromStooq_Market(metal) {
-  // Stooq symbols:
-  // XAUUSD = Gold (ozt) / USD
-  // XAGUSD = Silver (ozt) / USD
-  //
-  // Example: https://stooq.com/q/l/?s=xauusd&i=d
-
   let symbol = null;
 
   if (metal === "XAU") {
@@ -239,7 +215,10 @@ async function FetchFromStooq_Market(metal) {
   const endpointUrl = "https://stooq.com/q/l/?s=" + encodeURIComponent(symbol) + "&i=d";
 
   const response = await fetch(endpointUrl, {
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (!response.ok) {
@@ -248,9 +227,6 @@ async function FetchFromStooq_Market(metal) {
 
   const text = await response.text();
 
-  // CSV format:
-  // Symbol,Date,Time,Open,High,Low,Close,Volume
-  // XAUUSD,2026-02-23,23:00:00,....,....,....,5227.60,0
   const lines = String(text).trim().split(/\r?\n/);
 
   if (lines.length < 2) {
@@ -282,15 +258,7 @@ async function FetchFromStooq_Market(metal) {
 /* -------------------------------------------------- */
 /* Provider 3 — Metals-API (API key; monthly limits)   */
 /* -------------------------------------------------- */
-/*
-  This is the “apilayer / metals-api” style provider.
 
-  Widely-seen format:
-  - GET https://metals-api.com/api/latest?access_key=KEY&base=USD&symbols=XAU,XAG
-
-  Metals-API commonly returns "rates" as: 1 USD -> XAU (ounces).
-  We want USD per troy ounce, so we invert.
-*/
 async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
   const endpointUrl =
     "https://metals-api.com/api/latest" +
@@ -299,7 +267,10 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
     "&symbols=XAU,XAG";
 
   const response = await fetch(endpointUrl, {
-    cf: { cacheTtl: 300, cacheEverything: true }
+    cf: { cacheTtl: 300 },
+    headers: {
+      "Cache-Control": "max-age=0"
+    }
   });
 
   if (response.status === 429) {
@@ -322,7 +293,6 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
     throw new Error("Metals-API returned invalid rate for " + metal);
   }
 
-  // Invert: (1 USD -> rate ounces) => (1 ounce -> 1/rate USD)
   const priceUsdPerTroyOunce_Number = 1 / rate_Number;
 
   if (!Number.isFinite(priceUsdPerTroyOunce_Number) || priceUsdPerTroyOunce_Number <= 0) {
@@ -339,22 +309,14 @@ async function FetchFromMetalsApiLayer_Market(metal, metalsApiKey) {
 /* -------------------------------------------------- */
 /* Provider 4 — GoldAPI.io (API key; monthly limits)   */
 /* -------------------------------------------------- */
-/*
-  goldapi.io endpoints:
-  - https://www.goldapi.io/api/XAU/USD
-  - https://www.goldapi.io/api/XAG/USD
-  Header:
-  - x-access-token: YOUR_KEY
 
-  Usually returns:
-  { "price": 2034.12, ... }
-*/
 async function FetchFromGoldApiIo_Market(metal, goldApiIoKey) {
   const endpointUrl = "https://www.goldapi.io/api/" + encodeURIComponent(metal) + "/USD";
 
   const response = await fetch(endpointUrl, {
-    cf: { cacheTtl: 300, cacheEverything: true },
+    cf: { cacheTtl: 300 },
     headers: {
+      "Cache-Control": "max-age=0",
       "x-access-token": goldApiIoKey
     }
   });
