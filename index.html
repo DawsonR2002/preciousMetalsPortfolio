@@ -13,7 +13,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-  <link rel="manifest" href="manifest.webmanifest" />
+  <!-- IMPORTANT: Versioned manifest URL (forces refresh) -->
+  <link rel="manifest" href="manifest.webmanifest?v=8" />
 
   <style>
     body {
@@ -225,7 +226,6 @@
       </div>
     </div>
 
-    <!-- Int-only: slider is 0..100, app.js will round to int and show whole percents -->
     <input
       id="BiasTowardRetailPercent_Slider"
       class="bias-slider"
@@ -252,14 +252,15 @@
   <h2>Purchase History</h2>
   <div id="PurchaseHistoryContainer_Element"></div>
 
-  <script src="app.js"></script>
+  <!-- IMPORTANT: Versioned app.js URL (forces refresh everywhere) -->
+  <script src="app.js?v=8"></script>
 
   <!-- Service Worker Registration (required for offline use) -->
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
         navigator.serviceWorker
-          .register("./sw.js")
+          .register("./sw.js?v=8")
           .then(function (registration) {
             console.log("Service Worker registered successfully:", registration);
           })

@@ -1,15 +1,18 @@
 "use strict";
 
 // BUMP THIS any time you change index.html/app.js in a way you want to force-update.
-const CacheName_String = "precious-metals-portfolio-cache-v7";
+const CacheName_String = "precious-metals-portfolio-cache-v8";
+
+// This must match the querystring version in index.html.
+const AssetVersion_String = "8";
 
 // Only cache what you actually serve as static files.
 // If you add css/images later, put them here too.
 const PrecacheUrls_Array = [
   "./",
-  "./index.html",
-  "./app.js",
-  "./manifest.webmanifest"
+  "./index.html?v=" + AssetVersion_String,
+  "./app.js?v=" + AssetVersion_String,
+  "./manifest.webmanifest?v=" + AssetVersion_String
 ];
 
 self.addEventListener("install", function (event) {
@@ -78,7 +81,7 @@ self.addEventListener("fetch", function (event) {
         const networkResponse = await fetch(request);
         return networkResponse;
       } catch (err) {
-        const cachedIndex = await caches.match("./index.html");
+        const cachedIndex = await caches.match("./index.html?v=" + AssetVersion_String);
         if (cachedIndex) {
           return cachedIndex;
         }
