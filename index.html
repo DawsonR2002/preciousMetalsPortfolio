@@ -13,8 +13,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-  <!-- IMPORTANT: Versioned manifest URL (forces refresh) -->
-  <link rel="manifest" href="manifest.webmanifest?v=8" />
+  <link rel="manifest" href="manifest.webmanifest?v=10" />
 
   <style>
     body {
@@ -114,8 +113,6 @@
       color: #444;
     }
 
-    /* === Added for Bias UI (keeps your style theme) === */
-
     .bias-section {
       margin-top: 10px;
       margin-bottom: 18px;
@@ -207,7 +204,6 @@
 
   <hr>
 
-  <!-- === Added Bias UI Section (Option 3) === -->
   <h2>Pricing Bias</h2>
 
   <div class="bias-section">
@@ -252,15 +248,13 @@
   <h2>Purchase History</h2>
   <div id="PurchaseHistoryContainer_Element"></div>
 
-  <!-- IMPORTANT: Versioned app.js URL (forces refresh everywhere) -->
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=10"></script>
 
-  <!-- Service Worker Registration (required for offline use) -->
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
         navigator.serviceWorker
-          .register("./sw.js?v=8")
+          .register("./sw.js?v=10")
           .then(function (registration) {
             console.log("Service Worker registered successfully:", registration);
           })
